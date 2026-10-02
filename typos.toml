@@ -1,6 +1,17 @@
+# Canonical typos configuration for every lemonfiber repo.
+#
+# Unlike the markdownlint config, this one is a floor rather than a copy: a repo
+# may add words and patterns its own tree needs, but every entry below must be
+# present with the same value. The `shared-files` job in the hygiene gate checks
+# that (GOV-R12, Q-R56).
+#
+
 [default]
-# A commit hash or a digest is hexadecimal, and its letters are not words.
-extend-ignore-re = ["\\b[0-9a-f]*[0-9][0-9a-f]*\\b"]
+# Ignore hotkey mockup notation like [e]rror, [s]ervice in TUI examples.
+extend-ignore-re = ["\\[[a-z]\\][a-zA-Z]+", "\\b[0-9a-f]*[0-9][0-9a-f]*\\b"]
 
 [default.extend-words]
+ratatui = "ratatui"
+Ratatui = "Ratatui"
 lemonfiber = "lemonfiber"
+Servarr = "Servarr"
