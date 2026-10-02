@@ -1,0 +1,6 @@
+[default]
+# A commit hash or a digest is hexadecimal, and its letters are not words.
+extend-ignore-re = ["\\b[0-9a-f]*[0-9][0-9a-f]*\\b"]
+
+[default.extend-words]
+lemonfiber = "lemonfiber"

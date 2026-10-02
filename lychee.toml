@@ -1,0 +1,29 @@
+# Link checking, for the hygiene gate the spec repo defines.
+#
+# The gate runs `lychee .` over this tree, and lychee skips hidden directories
+# unless told otherwise — so the links in `.docs/` were not being checked, and
+# the check was green because it had found nothing to check.
+#
+# `.git` is excluded because turning hidden files on lets lychee walk it, and
+# what it holds is compressed objects rather than documents.
+hidden = true
+exclude_path = [".git"]
+
+# Retries, because a link check that fails on one slow host teaches people to
+# re-run it rather than to read it.
+max_retries = 2
+
+# There is deliberately no `accept` list here.
+#
+# There was one — `["200", "206", "429"]` — and it never ran. The shared hygiene
+# workflow passes `--accept` on the command line, and a command-line argument
+# beats a config file, so this file's list was decoration. It happened to be
+# identical to the one that ran, which is why nobody noticed it was dead.
+#
+# That is the worse half of the duplication: not two values disagreeing, but two
+# values agreeing while only one is consulted. Somebody editing this one to fix a
+# failing link check would watch it keep failing and have no idea why.
+#
+# The list lives in `lemonfiber/spec`'s `hygiene.yml`, which is also where the
+# reasoning for each accepted code is written.
+exclude_loopback = true
