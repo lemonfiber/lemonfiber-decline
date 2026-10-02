@@ -1,0 +1,26 @@
+# Dependency updates, grouped so a week's worth arrives as one pull request per
+# ecosystem rather than one per crate (ADR-0016). Every action is pinned to a SHA
+# (ADR-0009), and Dependabot moves the pin and its comment together.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      crates:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ["*"]

@@ -1,0 +1,90 @@
+# CodeQL static analysis: the Rust crates and the Actions workflows. Rust
+# catches memory/logic classes the linters don't; actions catches workflow
+# injection and supply-chain flaws.
+name: codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # `alerts / alerts` is required, so it has to report on the queue's branch too. The
+  # shared gate asks about `github.ref` wherever there is no pull request, which on a
+  # merge group is the queue's own branch, and `analyze` has just uploaded an analysis
+  # under exactly that ref.
+  merge_group:
+  schedule:
+    - cron: "0 6 * * 2"
+permissions:
+  contents: read
+concurrency:
+  # A pull request pushed again cancels the run on its old head, which nobody
+  # will read and which holds runners the org shares (Q-R75). Every other event
+  # (a push to main, a tag, a merge queue) is grouped by its own run, so it is
+  # never cancelled and never cancels.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [rust, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3
+        if: matrix.language == 'rust'
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3
+        with:
+          # One category per language, because two analyses of one commit that do not
+          # name themselves apart land in the same place and the second replaces the
+          # first. The check then reports a configuration it saw on main as missing
+          # here, and says so about whichever language finished second.
+          category: "/language:${{ matrix.language }}"
+
+  # The analysis finding something is not the same as anything stopping it. The
+  # check GitHub raises beside it compares the configurations a pull request
+  # produced against every one seen on main, and the supply-chain scan uploads
+  # three that only ever run on main — so it is neutral on every pull request,
+  # whatever the analysis found, and gates nothing. The workflow called here asks
+  # the question that was meant instead: is there an open alert against what this
+  # branch proposes.
+  #
+  # Called rather than written out, because it is one judgement for the whole
+  # organisation, and because the sixty lines of shell around the gate
+  # were the part with no guard on them — the gate script itself is already held
+  # to the canonical copy, byte for byte, by `check_shared_files.py`. What stays
+  # here is what is about this repository: the matrix the gate reads the expected
+  # languages off, and the triggers a reusable workflow cannot declare.
+  #
+  # `!cancelled()` rather than `always()`, and rather than `needs:` alone: a
+  # `needs:` dependency that fails makes this job vanish, and a skipped required
+  # check satisfies branch protection — so the one gate that refuses a branch an
+  # alert stands against would be absent in exactly the case where the analysis
+  # went wrong. GitHub's code-scanning upload failed for hours on 2026-09-13 and
+  # every one of those runs took this job with it. The gate refuses a commit it
+  # has no analysis of, by language and by name, so running it after a failed
+  # analysis is a red check naming what is missing rather than a skipped one that
+  # says nothing. A cancelled run is somebody pressing stop, and finishing the
+  # job they stopped serves nobody.
+  alerts:
+    needs: analyze
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+      security-events: read
+    uses: lemonfiber/spec/.github/workflows/codeql-alerts.yml@09410894c122b6395d553143417d9248bc95ade6 # v1.0.25
+    with:
+      # A matrix's aggregate: not `success` if either language's analysis failed,
+      # which is the right reading — an alert list missing one language's findings
+      # answers for neither. It only decides whether the gate waits five minutes
+      # for an upload or asks once; which language is absent it works out itself,
+      # off the matrix above.
+      analysis: ${{ needs.analyze.result }}

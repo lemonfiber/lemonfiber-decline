@@ -1,0 +1,88 @@
+# The crate and the image, checked on every change: format, lints, tests, the
+# toolchain the crate promises, its dependency policy, and an image build.
+name: build
+on:
+  pull_request:
+  merge_group:
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --locked
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The version the crate promises
+        id: promised
+        run: |
+          version="$(sed -n 's/^rust-version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -1)"
+          if [ -z "$version" ]; then
+            echo "::error file=Cargo.toml::no rust-version is declared, so there is no promise to collect on"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # 1.95.0
+        with:
+          toolchain: ${{ steps.promised.outputs.version }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: The crate builds on the version it promises
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.promised.outputs.version }}
+        run: cargo check --locked
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+
+  # The image builds, runs locked down the way the stack runs it, and answers its own
+  # health check. Nothing is pushed: a signed tag is the only thing that publishes.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build
+        run: docker build -t decline:check .
+      - name: Runs read-only, non-root, with no capabilities, and answers its health
+        run: |
+          set -euo pipefail
+          docker run -d --name decline-check --read-only --cap-drop ALL \
+            --security-opt no-new-privileges decline:check
+          for _ in $(seq 1 20); do
+            if docker exec decline-check /decline health; then
+              docker rm -f decline-check >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs decline-check
+          echo "::error::the image did not answer its own health check"
+          exit 1
