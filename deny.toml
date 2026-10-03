@@ -6,7 +6,9 @@ yanked = "deny"
 # A second copy of a crate is refused. An entry in `skip` is one this crate cannot
 # remove itself: the older copy belongs to a dependency, and the reason names which.
 multiple-versions = "deny"
-skip = []
+skip = [
+  { crate = "windows-sys@0.52", reason = "ring and errno, under tokio, are on the 0.52 line" },
+]
 # Two families are refused as dependencies rather than merely avoided as a habit,
 # and both are stems: a family is published under one prefix, and banning the one
 # somebody reaches for first would leave the rest.
@@ -92,3 +94,5 @@ private = { ignore = true }
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# The core, for the formats it shares with this service at a pinned commit.
+allow-git = ["https://github.com/lemonfiber/lemonfiber"]

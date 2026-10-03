@@ -1,10 +1,16 @@
 //! The decline service: the one process that answers an invitation's decline address.
 //!
 //! It runs in the stack beside the household front door, restarted by the stack's
-//! policy, and is the only thing that serves the decline address (ADR-0029). This
-//! build answers its health and refuses every other request.
+//! policy, and is the only thing that serves the decline address. It shows the
+//! invitation a token names, and on a refusal disables the account made for it and
+//! records the refusal for the core.
 
+mod declining;
+mod jellyfin;
+mod limit;
+mod page;
 mod serving;
+mod settings;
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
@@ -17,10 +23,19 @@ const LISTEN: SocketAddr =
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
-        None => serving::serve(LISTEN).await,
+        None => {
+            let settings = settings::Settings::from(|name| std::env::var(name).ok());
+            let service = serving::Service::new(settings, limit::Limit::standard());
+            let stopped = async {
+                let _ = tokio::signal::ctrl_c().await;
+            };
+            serving::serve(LISTEN, service, stopped).await
+        }
         Some("health") => serving::healthy(LISTEN.port()).await,
         Some(other) => {
-            eprintln!("decline: no command called {other}; run it bare to serve, or `health` to ask whether it is serving");
+            eprintln!(
+                "decline: no command called {other}; run it bare to serve, or `health` to ask whether it is serving"
+            );
             ExitCode::from(2)
         }
     }
