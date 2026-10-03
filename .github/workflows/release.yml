@@ -1,0 +1,260 @@
+# Publish the service's image from a tag the release train cut (ADR-0033 §3, §4).
+#
+# A tag `vX.Y.Z`, or `vX.Y.Z-<identifier>` for a pre-release, on a commit `main`
+# holds is the only thing that publishes. Each platform is built on a runner of
+# its own architecture and pushed by digest; the two are joined under one
+# multi-architecture index at `ghcr.io/lemonfiber/<service>:<tag>`, which carries
+# BuildKit's SBOM and provenance, and gets a build-provenance attestation and an
+# SBOM attestation per platform from GitHub. The index digest is recorded in the
+# run summary and handed to `lemonfiber-media-stack`'s `image-bump`, which opens
+# the pull request pinning it.
+#
+# The service id is this repository's name without `lemonfiber-` (ADR-0033 §1),
+# so the same file serves every image repository.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+
+concurrency:
+  # One publish per tag, never cancelled: a half-published index is worse than
+  # a second run that finds the tag already built.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/lemonfiber
+  # Pinned by digest like every other image the build runs: the builder that
+  # writes the attestations, and the scanner that writes the SBOM.
+  BUILDKIT: moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+  SBOM_SCANNER: docker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    outputs:
+      service: ${{ steps.what.outputs.service }}
+      image: ${{ steps.what.outputs.image }}
+      tag: ${{ steps.what.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The tag is one the train cuts, on main, at the version the crate declares
+        id: what
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          # `rc` is refused as the train refuses it: ARCH-R43 gives a release
+          # candidate a meaning no tag cut here may claim by accident.
+          # Matched in the shell rather than piped to `grep -q`, which can exit
+          # before its producer finishes and read a match as none under pipefail.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]] \
+            || [[ "$TAG" =~ ^v[0-9.]+-rc[0-9]*(\.|$) ]]; then
+            echo "::error::'${TAG}' is not a tag the train cuts: vX.Y.Z, or vX.Y.Z-<identifier> other than rc"
+            exit 1
+          fi
+
+          service="${REPO#lemonfiber-}"
+          if [ "$service" = "$REPO" ] || [[ ! "$service" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+            echo "::error::'${REPO}' is not named lemonfiber-<service> (ADR-0033 §1)"
+            exit 1
+          fi
+
+          # Nothing is published from a branch: the tagged commit is one main holds.
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${TAG} points at ${GITHUB_SHA}, which main does not hold"
+            exit 1
+          fi
+
+          declared="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          if [ "v${declared}" != "$TAG" ]; then
+            echo "::error::the crate declares ${declared}, so it is not tagged ${TAG}"
+            exit 1
+          fi
+
+          {
+            echo "service=${service}"
+            echo "image=${REGISTRY}/${service}"
+            echo "tag=${TAG}"
+          } >> "$GITHUB_OUTPUT"
+          echo "publishing ${REGISTRY}/${service}:${TAG}"
+
+  build:
+    needs: settle
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build on this platform and push by digest
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          IMAGE: ${{ needs.settle.outputs.image }}
+          TAG: ${{ needs.settle.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          # The default driver cannot write attestations; this one runs the
+          # pinned BuildKit.
+          docker buildx create --use --driver docker-container --driver-opt "image=${BUILDKIT}" >/dev/null
+          docker buildx build . \
+            --platform "$PLATFORM" \
+            --label "org.opencontainers.image.source=${SOURCE}" \
+            --label "org.opencontainers.image.version=${TAG#v}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --provenance mode=max \
+            --attest "type=sbom,generator=${SBOM_SCANNER}" \
+            --output "type=image,name=${IMAGE},push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file metadata.json
+          digest="$(python3 -c 'import json; print(json.load(open("metadata.json"))["containerimage.digest"])')"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
+            || { echo "::error::the build reported no digest: '${digest}'"; exit 1; }
+          mkdir -p digests
+          touch "digests/${digest#sha256:}"
+          echo "${PLATFORM} pushed as ${digest}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digest-${{ matrix.runner }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [settle, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.index.outputs.digest }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - name: Join the platforms under one index, tagged
+        id: index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          IMAGE: ${{ needs.settle.outputs.image }}
+          TAG: ${{ needs.settle.outputs.tag }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          sources=()
+          for file in digests/*; do
+            sources+=("${IMAGE}@sha256:$(basename "$file")")
+          done
+          [ "${#sources[@]}" -eq 2 ] || { echo "::error::expected two platform digests, got ${#sources[@]}"; exit 1; }
+          docker buildx imagetools create --tag "${IMAGE}:${TAG}" "${sources[@]}"
+
+          docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{json .Manifest}}' > descriptor.json
+          digest="$(python3 -c 'import json; print(json.load(open("descriptor.json"))["digest"])')"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
+            || { echo "::error::the registry named no index digest: '${digest}'"; exit 1; }
+          docker buildx imagetools inspect --raw "${IMAGE}@${digest}" > index.json
+          # The pin is an index publishing both platforms (E1-R1, F2-R6), and
+          # each platform's image manifest is what its SBOM describes.
+          python3 - "$digest" <<'PY'
+          import json, os, sys
+          index = json.load(open("index.json"))
+          found = {
+              f"{m['platform']['os']}/{m['platform']['architecture']}": m["digest"]
+              for m in index.get("manifests", [])
+              if m.get("platform", {}).get("os") not in (None, "unknown")
+          }
+          missing = {"linux/amd64", "linux/arm64"} - set(found)
+          if missing:
+              sys.exit(f"::error::the index does not publish {', '.join(sorted(missing))}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"digest={sys.argv[1]}\n")
+              out.write(f"amd64={found['linux/amd64']}\n")
+              out.write(f"arm64={found['linux/arm64']}\n")
+          PY
+          for arch in amd64 arm64; do
+            docker buildx imagetools inspect "${IMAGE}:${TAG}" \
+              --format "{{ json (index .SBOM \"linux/${arch}\").SPDX }}" > "sbom-${arch}.spdx.json"
+          done
+          {
+            echo "## ${IMAGE}:${TAG}"
+            echo
+            echo "Index digest: \`${digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "published ${IMAGE}:${TAG} as ${digest}"
+      - name: Attest the index's build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ needs.settle.outputs.image }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the linux/amd64 image's SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ needs.settle.outputs.image }}
+          subject-digest: ${{ steps.index.outputs.amd64 }}
+          sbom-path: sbom-amd64.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the linux/arm64 image's SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ needs.settle.outputs.image }}
+          subject-digest: ${{ steps.index.outputs.arm64 }}
+          sbom-path: sbom-arm64.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+  # The key that reaches the stack is held behind the `release` environment,
+  # whose branch policy admits main and `v*` tags only, as in the core.
+  pin:
+    needs: [settle, publish]
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Mint a token that can reach the stack
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: lemonfiber-media-stack
+      - name: Ask the stack to pin what this tag published
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ needs.settle.outputs.service }}
+          TAG: ${{ needs.settle.outputs.tag }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${OWNER}/lemonfiber-media-stack/actions/workflows/image-bump.yml/dispatches" \
+            -f ref=main -f "inputs[service]=${SERVICE}" -f "inputs[tag]=${TAG}" -f "inputs[digest]=${DIGEST}"
+          echo "asked lemonfiber-media-stack to pin ${SERVICE} at ${TAG}, ${DIGEST}."
