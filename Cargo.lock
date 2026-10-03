@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "lemonfiber-decline"
-version = "0.17.0"
+version = "0.17.0-pre.1"
 dependencies = [
  "axum",
  "jiff",
