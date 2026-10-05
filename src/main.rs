@@ -3,10 +3,12 @@
 //! It runs in the stack beside the household front door, restarted by the stack's
 //! policy, and is the only thing that serves the decline address. It shows the
 //! invitation a token names, and on a refusal disables the account made for it and
-//! records the refusal for the core.
+//! records the refusal for the core. Once a minute it takes back every invitation whose
+//! window has closed, and records what it did.
 
 mod declining;
 mod jellyfin;
+mod lapsing;
 mod limit;
 mod page;
 mod serving;
@@ -29,7 +31,10 @@ async fn main() -> ExitCode {
             let stopped = async {
                 let _ = tokio::signal::ctrl_c().await;
             };
-            serving::serve(LISTEN, service, stopped).await
+            tokio::select! {
+                code = serving::serve(LISTEN, service.clone(), stopped) => code,
+                () = serving::lapsing(service) => ExitCode::FAILURE,
+            }
         }
         Some("health") => serving::healthy(LISTEN.port()).await,
         Some(other) => {

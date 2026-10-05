@@ -1,9 +1,9 @@
-//! The three calls the service makes to the media server, and nothing else.
+//! The calls the service makes to the media server, and nothing else.
 //!
 //! It reads an account, reads whether that account's password moved since the
-//! invitation was issued, and writes the account's policy back disabled. Each call is
-//! made server-side for the one account a valid token names; nothing a browser sends
-//! is passed through.
+//! invitation was issued, writes the account's policy back disabled, and removes an
+//! account. Each call is made server-side for one account the core's table names;
+//! nothing a browser sends is passed through.
 
 use serde_json::Value;
 
@@ -12,6 +12,12 @@ use lemonfiber_sidecar::decline::Key;
 /// An account as the service needs it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Account {
+    /// The identifier the server answered with, where it answered with one.
+    pub(crate) id: Option<String>,
+    /// Whether the server says a password is set on it, where it says.
+    pub(crate) has_password: Option<bool>,
+    /// Whether anybody has ever signed in to it or used it.
+    pub(crate) seen: bool,
     /// Whether it administers the server, which is never declined.
     pub(crate) administrator: bool,
     /// Whether it is already disabled.
@@ -35,6 +41,9 @@ pub(crate) trait Server {
 
     /// Write `policy` back for the account `id`, with `IsDisabled` set.
     async fn disable(&self, id: &str, policy: Value) -> Result<(), Silent>;
+
+    /// Remove the account `id`.
+    async fn remove(&self, id: &str) -> Result<(), Silent>;
 }
 
 /// The media server over HTTP, with the key minted for this service.
@@ -102,18 +111,42 @@ impl Server for Jellyfin {
             .send()
             .await
             .map_err(|_| Silent)?;
-        if answer.status().is_success() {
-            Ok(())
-        } else {
-            Err(Silent)
-        }
+        succeeded(&answer)
+    }
+
+    async fn remove(&self, id: &str) -> Result<(), Silent> {
+        let answer = self
+            .client
+            .delete(format!("{}/Users/{id}", self.base))
+            .header("Authorization", self.authorisation())
+            .send()
+            .await
+            .map_err(|_| Silent)?;
+        succeeded(&answer)
+    }
+}
+
+/// Whether the server took a write.
+fn succeeded(answer: &reqwest::Response) -> Result<(), Silent> {
+    if answer.status().is_success() {
+        Ok(())
+    } else {
+        Err(Silent)
     }
 }
 
 /// The account a `/Users/{id}` answer describes.
 fn account(user: &Value) -> Option<Account> {
     let policy = user.get("Policy")?.clone();
+    let dated = |field: &str| {
+        user.get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|date| !date.is_empty())
+    };
     Some(Account {
+        id: user.get("Id").and_then(Value::as_str).map(str::to_owned),
+        has_password: user.get("HasPassword").and_then(Value::as_bool),
+        seen: dated("LastLoginDate") || dated("LastActivityDate"),
         administrator: policy.get("IsAdministrator")?.as_bool()?,
         disabled: policy
             .get("IsDisabled")
@@ -140,7 +173,7 @@ fn claimed(entries: &Value, id: &str, since: u64) -> bool {
 }
 
 /// An account identifier without the hyphens one form of it carries.
-fn normalised(id: &str) -> String {
+pub(crate) fn normalised(id: &str) -> String {
     id.replace('-', "").to_ascii_lowercase()
 }
 

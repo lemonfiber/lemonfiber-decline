@@ -14,7 +14,7 @@ The decline service: the one image that answers an invitation's decline address 
 
 ## The one rule you cannot break here
 
-**It acts only on what the core's invitation table names.** It makes three fixed Jellyfin calls, for the one account a valid token names, changes only `IsDisabled` from false to true, and forwards nothing. A route that passes a request through to Jellyfin, or acts on an account the table does not name, is a defect however it is reached.
+**It acts only on what the core's invitation table names.** It makes fixed Jellyfin calls (ADR-0029 §2b) and forwards nothing. Its whole effect on an account the table names is one of two: `IsDisabled` from false to true, on a refusal or when an invitation's window closes, or the account removed, when its window closes and every guard in ADR-0029 §2a holds on reads made just before the call. Nothing is removed on doubt. A route that passes a request through to Jellyfin, an account the table does not name being touched, or a removal without every guard holding, is a defect however it is reached.
 
 ## Code standards (enforced)
 

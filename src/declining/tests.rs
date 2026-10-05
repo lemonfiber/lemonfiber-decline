@@ -18,6 +18,9 @@ impl Fake {
     fn holding(administrator: bool, disabled: bool) -> Self {
         Self {
             account: Ok(Some(Account {
+                id: Some("8c7a".to_owned()),
+                has_password: Some(false),
+                seen: false,
                 administrator,
                 disabled,
                 policy: json!({"IsDisabled": disabled}),
@@ -50,6 +53,10 @@ impl Server for Fake {
             disabled.push(id.to_owned());
         }
         self.disabling.clone()
+    }
+
+    async fn remove(&self, _id: &str) -> Result<(), Silent> {
+        Err(Silent)
     }
 }
 

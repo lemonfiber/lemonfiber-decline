@@ -4,14 +4,14 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::extract::{ConnectInfo, Path as Route, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{File, Key, Refusals, Table};
+use lemonfiber_sidecar::decline::{File, Key, Lapses, Refusals, Table};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
@@ -22,8 +22,14 @@ use crate::limit::{Limit, Limiter};
 use crate::page::{page, Said};
 use crate::settings::Settings;
 
+/// How long the media server has to answer one call. A refusal and a pass over lapsed
+/// invitations share one lock, so a call left hanging would hold up every refusal
+/// behind it.
+const ANSWER_WITHIN: Duration = Duration::from_secs(10);
+
 /// What every request is answered with: the settings, the rate limit, and the one
-/// lock that keeps two refusals from writing the record at once.
+/// lock that keeps two refusals, or a refusal and a pass over lapsed invitations, from
+/// writing at once.
 pub(crate) struct Service {
     settings: Settings,
     limiter: Mutex<Limiter>,
@@ -38,7 +44,10 @@ impl Service {
             settings,
             limiter: Mutex::new(Limiter::new(limit)),
             recording: Mutex::new(()),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(ANSWER_WITHIN)
+                .build()
+                .unwrap_or_default(),
         })
     }
 }
@@ -116,7 +125,7 @@ async fn declined(
     };
 
     let (standing, after) = decline(&token, at, &table, refusals, &server).await;
-    if standing == Standing::Declined && !recorded(config, &after).await {
+    if standing == Standing::Declined && !recorded(config, File::Refusals, &after.written()).await {
         eprintln!("decline: the account was disabled and the refusal could not be recorded");
     }
     answer(StatusCode::OK, &Said::Standing(&standing), &token)
@@ -166,13 +175,83 @@ async fn read(config: &Path, file: File) -> Option<String> {
         .ok()
 }
 
-/// Write `refusals` to the record, whole, by renaming a written copy over it, so the
+/// Write `text` to the record `file`, whole, by renaming a written copy over it, so the
 /// core never reads half of one.
-async fn recorded(config: &Path, refusals: &Refusals) -> bool {
-    let record = config.join(File::Refusals.name());
-    let written = config.join(format!("{}.writing", File::Refusals.name()));
-    tokio::fs::write(&written, refusals.written()).await.is_ok()
+async fn recorded(config: &Path, file: File, text: &str) -> bool {
+    let record = config.join(file.name());
+    let written = config.join(format!("{}.writing", file.name()));
+    tokio::fs::write(&written, text).await.is_ok()
         && tokio::fs::rename(&written, &record).await.is_ok()
+}
+
+/// How often the service looks for invitations whose window has closed.
+const PASS: Duration = Duration::from_mins(1);
+
+/// Take back the invitations whose window has closed, once every [`PASS`], for as long
+/// as the service runs.
+pub(crate) async fn lapsing(service: Arc<Service>) {
+    let mut every = tokio::time::interval(PASS);
+    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        every.tick().await;
+        if !passed(&service, now()).await {
+            eprintln!("decline: invitations were taken back and that could not be recorded");
+        }
+    }
+}
+
+/// One pass over the invitations whose window had closed by `at`, and whether what it
+/// did was recorded.
+///
+/// The key is read only where something is due, so a pass with nothing to take back
+/// reaches nothing. A record of lapses that cannot be read stops the pass: taking
+/// invitations back again over a record that would then be written afresh would lose
+/// what it held.
+pub(crate) async fn passed(service: &Service, at: u64) -> bool {
+    let _recording = service.recording.lock().await;
+    let config = &service.settings.config;
+    let (table, refusals) = files(config).await;
+    let lapses = match read(config, File::Lapses).await {
+        Some(text) => match Lapses::read(&text) {
+            Ok(lapses) => lapses,
+            Err(unreadable) => {
+                eprintln!("decline: no invitation was taken back, because {unreadable}");
+                return true;
+            }
+        },
+        None => Lapses::default(),
+    };
+    let due = table.invitations.iter().any(|invitation| {
+        !invitation.open_at(at)
+            && refusals.of(&invitation.token).is_none()
+            && lapses.of(&invitation.token).is_none()
+    });
+    if !due {
+        return true;
+    }
+    let Some(key) = read(config, File::Key)
+        .await
+        .and_then(|text| Key::read(&text).ok())
+    else {
+        return true;
+    };
+    let server = Jellyfin {
+        base: service.settings.jellyfin.clone(),
+        key,
+        client: service.client.clone(),
+    };
+    let after = crate::lapsing::swept(at, &table, &refusals, lapses.clone(), &server, || {
+        table_in(config)
+    })
+    .await;
+    after == lapses || recorded(config, File::Lapses, &after.written()).await
+}
+
+/// The core's table as `config` holds it now, where it can be read.
+async fn table_in(config: &Path) -> Option<Table> {
+    read(config, File::Table)
+        .await
+        .and_then(|text| Table::read(&text).ok())
 }
 
 /// Seconds since the Unix epoch.

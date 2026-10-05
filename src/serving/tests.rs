@@ -5,14 +5,16 @@ use std::sync::Arc;
 use axum::body::{to_bytes, Body};
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{File, Invitation, Key, Refusals, Table, TokenHash};
+use lemonfiber_sidecar::decline::{
+    File, Invitation, Key, Lapses, Outcome, Refusals, Table, TokenHash,
+};
 use serde_json::json;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
 
-use super::{answers_ok, now, routes, Service};
+use super::{answers_ok, now, passed, routes, Service};
 use crate::limit::Limit;
 use crate::settings::Settings;
 
@@ -348,4 +350,104 @@ async fn a_refusal_that_cannot_be_recorded_still_says_what_was_done() {
 
     assert!(body.contains("You declined the invitation."));
     assert!(config.read(File::Refusals).is_empty());
+}
+
+/// A media server that holds the account `known`, never signed in to, with no password,
+/// and removes it when asked.
+async fn jellyfin_holding_an_offer() -> String {
+    let app = Router::new()
+        .route(
+            "/Users/{id}",
+            get(|| async {
+                Json(json!({"Id": "known", "HasPassword": false,
+                    "Policy": {"IsAdministrator": false, "IsDisabled": false}}))
+            })
+            .merge(delete(|| async { StatusCode::NO_CONTENT })),
+        )
+        .route(
+            "/System/ActivityLog/Entries",
+            get(|| async { Json(json!({"Items": []})) }),
+        );
+    let Ok(listener) = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).await else {
+        return String::new();
+    };
+    let at = listener
+        .local_addr()
+        .map(|at| at.to_string())
+        .unwrap_or_default();
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    format!("http://{at}")
+}
+
+/// A configuration directory holding a key and one invitation whose window closed a
+/// minute ago.
+fn lapsed(name: &str) -> Config {
+    let config = Config::new(name);
+    let table = Table::of(vec![Invitation {
+        token: TokenHash::of("token"),
+        account: "known".to_owned(),
+        name: "Ana".to_owned(),
+        issued: now() - 3_600,
+        lapses: now() - 60,
+    }]);
+    config.write(File::Table, &table.written());
+    config.write(File::Key, "the-key\n");
+    config
+}
+
+#[tokio::test]
+async fn a_pass_takes_back_a_lapsed_invitation_and_records_it_for_the_core() {
+    let config = lapsed("lapse-pass");
+    let server = jellyfin_holding_an_offer().await;
+
+    let written = passed(&service(&config, &server, Limit::standard()), now()).await;
+
+    let lapses = Lapses::read(&config.read(File::Lapses));
+    assert!(written);
+    assert_eq!(
+        lapses
+            .ok()
+            .and_then(|lapses| lapses.of(&TokenHash::of("token")).map(|one| one.outcome)),
+        Some(Outcome::Removed)
+    );
+}
+
+#[tokio::test]
+async fn a_pass_with_nothing_due_reaches_nothing_and_writes_nothing() {
+    let config = Config::new("lapse-nothing").with_invitation();
+    config.write(File::Key, "the-key\n");
+
+    let written = passed(
+        &service(&config, "http://127.0.0.1:9", Limit::standard()),
+        now(),
+    )
+    .await;
+
+    assert!(written);
+    assert!(config.read(File::Lapses).is_empty());
+}
+
+#[tokio::test]
+async fn a_record_of_lapses_that_cannot_be_read_stops_the_pass_and_is_kept() {
+    let config = lapsed("lapse-garbled");
+    config.write(File::Lapses, "not a record");
+    let server = jellyfin_holding_an_offer().await;
+
+    let _ = passed(&service(&config, &server, Limit::standard()), now()).await;
+
+    assert_eq!(config.read(File::Lapses), "not a record");
+}
+
+#[tokio::test]
+async fn a_server_that_cannot_be_reached_is_left_for_the_next_pass() {
+    let config = lapsed("lapse-unreached");
+
+    let written = passed(
+        &service(&config, "http://127.0.0.1:9", Limit::standard()),
+        now(),
+    )
+    .await;
+
+    assert!(written);
+    assert!(config.read(File::Lapses).is_empty());
 }
