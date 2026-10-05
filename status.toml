@@ -7,14 +7,14 @@
 #
 # The core writes the service's compose entry from this repository's `plugin.toml`.
 # Writing the invitation, its addresses and the table this service reads, and reporting
-# a refusal as `declined`, are the core's. The core reaches the service through the files
-# in its configuration directory until it asks over `invite.decline` and the bundle
-# installs it.
+# a refusal as `declined` and a removal at the window's close as `expired`, are the
+# core's. The core reaches the service through the files in its configuration
+# directory until it asks over `invite.decline` and the bundle installs it.
 
 requirement = [
   { id = "D6-R15", state = "partial", evidence = ["src/serving.rs", "src/page.rs", "src/page/tests.rs::an_open_invitation_names_the_account_and_offers_the_refusal"] },
   { id = "D6-R16", state = "partial", evidence = ["src/declining.rs", "src/declining/tests.rs::declining_disables_the_account_and_records_the_refusal", "src/declining/tests.rs::a_second_refusal_writes_nothing"] },
-  { id = "D6-R21", state = "open" },
+  { id = "D6-R21", state = "partial", evidence = ["src/lapsing.rs", "src/lapsing/tests.rs::an_account_nobody_was_seen_in_is_removed_when_its_window_closes", "src/lapsing/tests.rs::an_account_somebody_has_been_in_is_switched_off_and_kept", "src/serving.rs"] },
   { id = "F14-R1", state = "open" },
   { id = "F14-R7", state = "open" },
   { id = "G5-R14", state = "partial", evidence = ["src/serving.rs"] },
