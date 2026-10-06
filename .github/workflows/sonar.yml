@@ -1,0 +1,127 @@
+name: sonar
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The tests and the coverage gate run over the merged tree exactly as on a pull
+  # request. The scan runs too, and SonarCloud records it against the queue's
+  # short-lived branch, since there is no pull request to decorate.
+  merge_group:
+# Read-only for the workflow. The one job that writes — the gate, which posts its
+# verdict on the pull request — asks for that itself.
+permissions:
+  contents: read
+concurrency:
+  # A pull request pushed again cancels the run on its old head, which nobody
+  # will read and which holds runners the org shares (Q-R75). Every other event
+  # (a push to main, a tag, a merge queue) is grouped by its own run, so it is
+  # never cancelled and never cancels.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: llvm-tools-preview
+      # Its own key: instrumented artifacts are not the ones `check` builds, and a
+      # shared key would have each job evicting the other's work.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: llvm-cov
+      - uses: taiki-e/install-action@75a348306ce8f67c0b06fc62c32a8546140ba955 # cargo-llvm-cov
+        with:
+          tool: cargo-llvm-cov
+      # Every line outside the process entry point runs under a test, as in the core.
+      # The report this writes is the one the scan reads.
+      - name: Coverage (100% of lines outside main.rs)
+        run: cargo llvm-cov --locked --ignore-filename-regex 'src/main\.rs' --fail-under-lines 100 --lcov --output-path lcov.info
+      # Whether a token reached this run, asked in a step of its own so the token is
+      # in no environment but this step's and the scanner's: the steps above compile
+      # and run every dependency's build script.
+      #
+      # A Dependabot run reads the Dependabot secret store and a pull request from a
+      # fork reads none, so either can arrive without one.
+      - name: Whether a token reached this run
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "${SONAR_TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      # A pull request without a token skips the scan rather than failing on an empty
+      # one. A push to main and a merge group scan whatever they were given, so a
+      # missing token there fails here, where it is named, and main's analysis is
+      # what every pull request is measured against.
+      - name: SonarQube Cloud scan
+        id: scan
+        if: github.event_name != 'pull_request' || steps.token.outputs.present == 'true'
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Runs when the scan failed, and says whether the host was answering: a scanner
+      # that cannot reach SonarCloud fails with a trace that reads like a finding.
+      # It changes nothing about the run; the scan still failed and the check is red.
+      - name: Whether SonarCloud was answering
+        if: always() && steps.scan.outcome == 'failure'
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 \
+            https://sonarcloud.io/api/system/status 2>/dev/null || echo "000")
+
+          # 000 is curl reaching nothing at all, which is the same news as a 5xx.
+          case "$code" in
+          5?? | 000)
+            said="The scan failed and SonarCloud answered ${code} to a plain status request, so the host was unavailable rather than this pull request being at fault. Coverage ran above and had to reach 100% either way. Re-run this job once sonarcloud.io is answering — no analysis gated this run."
+            ;;
+          *)
+            said="The scan failed and SonarCloud answered ${code} to a plain status request, so the host was reachable and the failure is in this run rather than an outage. Read the scanner output above. No analysis gated this run."
+            ;;
+          esac
+
+          echo "::notice::${said}"
+          printf '### Why the SonarCloud scan failed\n\n%s\n' "$said" >> "$GITHUB_STEP_SUMMARY"
+      # A skipped step is missing from the log, which reads the same as one that ran
+      # and found nothing, so the skip is said under its own name.
+      - name: Why the scan was skipped
+        if: github.event_name == 'pull_request' && steps.token.outputs.present != 'true'
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          said="The SonarCloud scan was skipped: no SONAR_TOKEN reached this run of a pull request opened by ${AUTHOR}. A Dependabot run reads the Dependabot secret store and a pull request from a fork reads none. Coverage ran above and still had to reach 100%. No analysis was produced, so none gated this run."
+          echo "::notice::${said}"
+          printf '### SonarCloud scan skipped\n\n%s\n' "$said" >> "$GITHUB_STEP_SUMMARY"
+
+  # Open SonarCloud issues must be zero, and the free plan's own quality gate cannot
+  # be configured to that standard. The shared reusable in spec holds the count
+  # instead, so every repository gates identically: it reads the scan's summary,
+  # fails on any new issue, and posts a sticky verdict on the pull request. A summary
+  # that never arrived, or one it cannot read, warns rather than blocks.
+  gate:
+    needs: sonar
+    # Runs whatever the scan did: `needs` alone would drop this job when the scan
+    # fails, and a check that never reports leaves a pull request with no line
+    # saying why. A failed scan still leaves `sonar` red. `!cancelled()` rather than
+    # `always()`, because a cancelled run is somebody pressing stop.
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: lemonfiber/spec/.github/workflows/sonar-gate.yml@999f97e9414290f029391d5d541087b8a6d23bdf # v1.0.29
+    with:
+      # What this repository carries, declared here so it can be read without a
+      # SonarCloud login. A ceiling rather than an allowance: it may not rise past
+      # what stands against `main`, and at zero the gate refuses the first issue.
+      allowed-open: 0
+    secrets:
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
