@@ -62,6 +62,7 @@ first time.
 
 ```sh
 cargo test
+cargo clippy --all-targets --locked -- -D warnings
 docker build -t decline .
 ```
 
