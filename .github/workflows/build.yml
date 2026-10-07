@@ -1,5 +1,6 @@
-# The crate and the image, checked on every change: format, lints, tests, the
-# toolchain the crate promises, its dependency policy, and an image build.
+# The crate and the image, checked on every change that reaches code: format,
+# lints, tests, the toolchain the crate promises, its dependency policy, and an
+# image build.
 name: build
 on:
   pull_request:
@@ -12,7 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Whether this change reaches code, for the jobs below that judge nothing else.
+  # Each of them skips where it does not, and runs wherever this job did not
+  # succeed, so an answer that could not be reached runs everything.
+  scope:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every commit, so the base is here to compare against, and no file
+          # contents but the checkout's: the comparison reads trees.
+          fetch-depth: 0
+          filter: blob:none
+      - id: diff
+        env:
+          # A pull request's base, a merge group's, or on a push the commit
+          # before it. Any other event has none, and the answer is then that
+          # everything runs.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: python3 scripts/the_code_a_change_touches.py "${BASE}"
+
   check:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,9 +56,17 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --locked
+      # The answer `what changed` gives, which decides whether these jobs and the
+      # CodeQL analysis run. Proven here rather than there: that job is not
+      # required, and a red one runs everything, so a broken answer would be paid
+      # for and never seen.
+      - name: What reaches code is told from what does not
+        run: python3 scripts/the_code_a_change_touches.py --self-test
 
   # Every line outside the process entry point runs under a test, as in the core.
   coverage:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +83,8 @@ jobs:
         run: cargo llvm-cov --locked --ignore-filename-regex 'src/main\.rs' --fail-under-lines 100
 
   msrv:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,6 +109,8 @@ jobs:
         run: cargo check --locked
 
   deny:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +121,8 @@ jobs:
   # The image builds, runs locked down the way the stack runs it, and answers its own
   # health check. Nothing is pushed: a signed tag is the only thing that publishes.
   image:
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
