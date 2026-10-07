@@ -1,0 +1,17 @@
+# What this repository implements, one row per requirement (OPS-R74).
+#
+# `done` means the requirement is met in full by what is here, `partial` that this
+# repository holds its part and the rest lives elsewhere, `open` that nothing here
+# meets it yet. The release gate and the no-stubs gate read this file; a pull
+# request that changes whether a requirement is met changes its row.
+#
+# The service's compose entry (its restart policy, binding tier and networks) is
+# lemonfiber-media-stack's; writing the invitation, its addresses and the table
+# this service reads, and reporting a refusal as `declined`, are the core's.
+
+requirement = [
+  { id = "D6-R15", state = "partial", evidence = ["src/serving.rs", "src/page.rs", "src/page/tests.rs::an_open_invitation_names_the_account_and_offers_the_refusal"] },
+  { id = "D6-R16", state = "partial", evidence = ["src/declining.rs", "src/declining/tests.rs::declining_disables_the_account_and_records_the_refusal", "src/declining/tests.rs::a_second_refusal_writes_nothing"] },
+  { id = "D6-R21", state = "open" },
+  { id = "G5-R14", state = "partial", evidence = ["src/serving.rs"] },
+]
