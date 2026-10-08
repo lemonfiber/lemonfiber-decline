@@ -14,6 +14,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # lemonfiber/spec's workflows are moved by the release train's one rolling
+    # bump pull request (OPS-R85), never by this updater.
+    ignore:
+      - dependency-name: "lemonfiber/spec*"
     groups:
       actions:
         patterns: ["*"]
