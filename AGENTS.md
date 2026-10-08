@@ -1,11 +1,11 @@
 # AGENTS.md — lemonfiber-decline
 
-Guidance for any AI agent (Cursor, Codex, Aider, Claude Code, …) working in this
-repo.
-
-> **Common rules for every lemonfiber repo are canonical in the spec:**
-> [50-governance/ai-contributors.md](https://github.com/lemonfiber/spec/blob/main/50-governance/ai-contributors.md).
-> Read them. This file is the `lemonfiber-decline`-specific header only.
+> **Start at the roadmap and board on [lemonfiber.app](https://lemonfiber.app),
+> rendered from the report of where every unreleased version stands. Then the
+> rules** every repository shares:
+> [working in the repositories](https://github.com/lemonfiber/spec/blob/main/50-governance/working-in-the-repositories.md)
+> and [the rules for agents](https://github.com/lemonfiber/spec/blob/main/50-governance/ai-contributors.md).
+> This file holds only what is true of this repository.
 
 ## What this repo is
 
@@ -20,5 +20,4 @@ The decline service: the one image that answers an invitation's decline address 
 
 - `unsafe` is **forbidden**. No `unwrap`/`expect`/`panic`/`todo` in non-test code.
 - **No lint suppressions in `src/`**: change the code or the rule, never `#[allow]`.
-- Every commit is signed and cites the requirement it serves (`Spec: <ID>`).
 - The image stays distroless and non-root, with nothing in it but the binary.
