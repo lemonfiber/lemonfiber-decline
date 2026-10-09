@@ -53,13 +53,20 @@ jobs:
           RUSTUP_TOOLCHAIN: ${{ steps.promised.outputs.version }}
         run: cargo check --locked
 
+  # cargo-deny as a binary rather than through its action, which builds a Docker
+  # image from a Docker Hub base on every run and fails whenever Hub rate-limits
+  # the runners. The version and the arguments are the ones that action ran.
   deny:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+      - uses: taiki-e/install-action@75a348306ce8f67c0b06fc62c32a8546140ba955 # cargo-deny
+        with:
+          tool: cargo-deny@0.20.2
+      - name: The dependencies are allowed
+        run: cargo deny --log-level warn --manifest-path ./Cargo.toml --all-features check
 
   # The image builds, runs locked down the way the stack runs it, and answers its own
   # health check. Nothing is pushed: a signed tag is the only thing that publishes.
