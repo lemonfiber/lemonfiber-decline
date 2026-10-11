@@ -34,6 +34,7 @@ env:
 jobs:
   settle:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       service: ${{ steps.what.outputs.service }}
       image: ${{ steps.what.outputs.image }}
@@ -96,6 +97,7 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -143,6 +145,7 @@ jobs:
   publish:
     needs: [settle, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -235,6 +238,7 @@ jobs:
   pin:
     needs: [settle, publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     steps:
       - name: Mint a token that can reach the stack
