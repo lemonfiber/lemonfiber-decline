@@ -244,6 +244,7 @@ jobs:
           client-id: ${{ vars.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_KEY }}
           owner: ${{ github.repository_owner }}
+          permission-actions: write
           repositories: lemonfiber-media-stack
       - name: Ask the stack to pin what this tag published
         env:
