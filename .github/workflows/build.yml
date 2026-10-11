@@ -14,6 +14,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,11 +27,12 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
-      - name: Tests
-        run: cargo test --locked
+      # The tests run once, under coverage in sonar.yml, whose `coverage` job
+      # fails on a failing test as this step did.
 
   msrv:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,6 +60,7 @@ jobs:
   # the runners. The version and the arguments are the ones that action ran.
   deny:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,6 +75,7 @@ jobs:
   # health check. Nothing is pushed: a signed tag is the only thing that publishes.
   image:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
