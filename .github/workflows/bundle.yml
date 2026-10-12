@@ -1,0 +1,77 @@
+# Ask the catalogue to move this plugin's pin in the default bundle (OPS-R86).
+#
+# A train tag's run of the `image` workflow opens one rolling pull request on
+# `release/image-pin` naming the image the tag published. Once that
+# pull request merges, the merge commit is the revision whose manifest names
+# that image, and `bundle-bump` in lemonfiber-plugins moves the bundle's pin and
+# copy to it. It is told this repository's address, and refuses a plugin the
+# bundle does not pin from here, so a copy of this repository moves nothing but
+# its own pin.
+name: bundle
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+permissions:
+  contents: read
+# A pull request pushed again cancels the run on its old head, which nobody
+# will read and which holds runners the org shares (Q-R75). Every other event
+# is grouped by its own run, so it is never cancelled and never cancels.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    if: >-
+      github.event.pull_request.merged == true
+      && github.event.pull_request.head.ref == 'release/image-pin'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.repository_owner == 'lemonfiber'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - name: Read the plugin's id at the merged revision
+        id: plugin
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys, tomllib
+          plugin = tomllib.load(open("plugin.toml", "rb"))["plugin"]["id"]
+          if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", plugin):
+              sys.exit(f"::error::{plugin!r} is not a plugin id")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"id={plugin}\n")
+          PY
+      - name: Mint a token that can dispatch the catalogue's bump
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: lemonfiber-plugins
+          permission-actions: write
+      - name: Ask the catalogue to pin the merged revision
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          PLUGIN: ${{ steps.plugin.outputs.id }}
+          REVISION: ${{ github.event.pull_request.merge_commit_sha }}
+          ORIGIN: ${{ github.server_url }}/${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BOT: ${{ steps.token.outputs.app-slug }}[bot]
+        run: |
+          set -euo pipefail
+          [ "$AUTHOR" = "$BOT" ] \
+            || { echo "::error::release/image-pin was opened by ${AUTHOR}, not ${BOT}, so nothing is pinned"; exit 1; }
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] \
+            || { echo "::error::the merge named no commit: '${REVISION}'"; exit 1; }
+          gh api --method POST \
+            "repos/${OWNER}/lemonfiber-plugins/actions/workflows/bundle-bump.yml/dispatches" \
+            -f ref=main -f "inputs[id]=${PLUGIN}" -f "inputs[revision]=${REVISION}" -f "inputs[origin]=${ORIGIN}"
+          echo "asked lemonfiber-plugins to pin ${PLUGIN} at ${REVISION}."
