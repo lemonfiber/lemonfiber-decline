@@ -1,14 +1,16 @@
-# Publish this service's image from a tag the release train cut, through
-# spec's shared `rust-service-release` (ADR-0033 §3, §4). The service id is this
-# repository's name without `lemonfiber-` (ADR-0033 §1).
+# Publish this service's image from every commit on main and from each tag the
+# release train cuts, through spec's shared `rust-service-release` (ADR-0033 §3, §4;
+# OPS-R90). The service id is this repository's name without `lemonfiber-`
+# (ADR-0033 §1).
 name: release
 on:
   push:
+    branches: [main]
     tags: ["v*"]
 permissions:
   contents: read
 concurrency:
-  # One publish per tag, never cancelled: a half-published index is worse than
+  # One publish per ref, never cancelled: a half-published index is worse than
   # a second run that finds the tag already built.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -19,6 +21,6 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    uses: lemonfiber/spec/.github/workflows/rust-service-release.yml@579dd00118f557a9ff703c988a0648012b828bed # v1.0.98
+    uses: lemonfiber/spec/.github/workflows/rust-service-release.yml@82080c2235fceb376702586bade51d359ab3434d # v1.0.99
     secrets:
       RELEASE_APP_KEY: ${{ secrets.RELEASE_APP_KEY }}
