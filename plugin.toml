@@ -1,0 +1,42 @@
+schema_version = 1
+
+[plugin]
+id          = "decline"
+name        = "Decline service"
+version     = "0.17.0"
+description = "Lets somebody you invited turn the invitation down, and switches the account off the moment they do"
+without_it  = "An invitation carries no way to refuse it, and stays claimable until it lapses"
+upstream    = "https://github.com/lemonfiber/lemonfiber-decline"
+license     = "Hippocratic-3.0"
+forms       = ["library", "full"]
+
+[[service]]
+id            = "decline"
+name          = "Decline service"
+image         = "ghcr.io/lemonfiber/decline"
+digest        = "sha256:814d551113e93135259ac8e92586938bf88c3bb03bc8ce75b8e0d7e4d14a8147"
+tag           = "0.17.0"
+port          = 5056
+bind          = "lan"
+listens       = 8080
+health        = { kind = "http", path = "/health", timeout_s = 30 }
+criticality   = "enhancing"
+memory_mib    = 32
+mem_limit_mib = 64
+reaches       = ""
+asks_for      = "Nothing beyond this machine. When an invitee refuses, it switches that one account off in Jellyfin, over a network the two share alone, and records the refusal for lemonfiber."
+posture       = "confined"
+replaces      = "decline"
+
+[[proof]]
+id      = "decline.health-names-its-key"
+title   = "The health check says which key it holds, and nothing else"
+fixture = "recordings/decline/health-names-its-key.json"
+why     = """
+The image's own health check asks this, and it answers with the fingerprint of
+the key lemonfiber wrote for it, or nothing before one is written. It never uses
+the key to answer, so a caller learns whether a key is in place and not what it
+is.
+"""
+request = { method = "GET", path = "/health" }
+expect  = { status = 200, json_has_keys = ["key"] }
