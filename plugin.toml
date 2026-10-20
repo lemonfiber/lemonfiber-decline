@@ -42,6 +42,10 @@ is.
 request = { method = "GET", path = "/health" }
 expect  = { status = 200, json_has_keys = ["key"] }
 
+
+[[ask]]
+capability = "identity.source"
+
 [[claim]]
 capability = "invite.decline"
 
