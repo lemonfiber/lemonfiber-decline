@@ -1,10 +1,16 @@
 {
-  "lemonfiber": "675430a7b93f8a4abbd859b5fe7702f836bd3207",
+  "lemonfiber": "7343ad109f993c0459be32d5876bed1aa7f6b42e",
   "against": "recordings",
   "proofs": [
     {
       "id": "decline.health-names-its-key",
       "kind": "proof",
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "id": "invite.decline/held",
+      "kind": "probe",
       "outcome": "passed",
       "detail": ""
     }
