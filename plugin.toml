@@ -27,6 +27,7 @@ reaches       = ""
 asks_for      = "Nothing beyond this machine. When an invitee refuses, it switches that one account off in Jellyfin, over a network the two share alone, and records the refusal for lemonfiber."
 posture       = "confined"
 replaces      = "decline"
+provides      = ["invite.decline"]
 
 [[proof]]
 id      = "decline.health-names-its-key"
@@ -40,3 +41,16 @@ is.
 """
 request = { method = "GET", path = "/health" }
 expect  = { status = 200, json_has_keys = ["key"] }
+
+
+[[ask]]
+capability = "identity.source"
+
+[[claim]]
+capability = "invite.decline"
+
+[[claim.probe]]
+id      = "held"
+request = { method = "GET", path = "/health" }
+expect  = { status = 200, json_has_keys = ["key"] }
+fixture = "recordings/decline/invite-decline-held.json"
