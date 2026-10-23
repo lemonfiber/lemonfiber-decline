@@ -23,6 +23,6 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    uses: lemonfiber/spec/.github/workflows/rust-service-release.yml@ca770979e940f48a57d25cbc2d687b0d1cb58049 # v1.0.102
+    uses: lemonfiber/spec/.github/workflows/rust-service-release.yml@7e55a9fec4d241c758e560f98006a8abce38fb9b # v1.0.108
     secrets:
       RELEASE_APP_KEY: ${{ secrets.RELEASE_APP_KEY }}
