@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: lemonfiber/spec/.github/workflows/rust-coverage.yml@44ec6254b939d4c746bd4ea32048b0daf0edd871 # v1.0.110
+    uses: lemonfiber/spec/.github/workflows/rust-coverage.yml@5fc935f490ccbedf443fcb8e7d29ab554f13a0a4 # v1.0.111
     with:
       # A ceiling rather than an allowance: it may not rise past what stands
       # against `main`, and at zero the gate refuses the first issue.
