@@ -11,7 +11,7 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{File, Key, Refusals, Table};
+use lemonfiber_sidecar::decline::{Claimed, File, Key, Refusals, Table};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
@@ -151,7 +151,7 @@ async fn files(config: &Path) -> (Table, Refusals) {
     let table = read(config, File::Table)
         .await
         .and_then(|text| Table::read(&text).ok())
-        .unwrap_or_else(|| Table::of(Vec::new()));
+        .unwrap_or_else(|| Table::of(Claimed::Unknown, Vec::new()));
     let refusals = read(config, File::Refusals)
         .await
         .and_then(|text| Refusals::read(&text).ok())

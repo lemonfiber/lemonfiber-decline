@@ -15,6 +15,6 @@ RUN cargo build --release --locked && cp target/release/decline /decline
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /decline /decline
 USER nonroot:nonroot
-EXPOSE 8080
+EXPOSE 8080 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD ["/decline", "health"]
 ENTRYPOINT ["/decline"]
