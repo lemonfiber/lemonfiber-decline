@@ -35,7 +35,6 @@ pub(crate) struct Service {
     settings: Settings,
     limiter: Mutex<Limiter>,
     recording: Mutex<()>,
-    client: reqwest::Client,
 }
 
 impl Service {
@@ -45,10 +44,6 @@ impl Service {
             settings,
             limiter: Mutex::new(Limiter::new(limit)),
             recording: Mutex::new(()),
-            client: reqwest::Client::builder()
-                .timeout(ANSWER_WITHIN)
-                .build()
-                .unwrap_or_default(),
         })
     }
 }
@@ -113,16 +108,8 @@ async fn declined(
     let _recording = service.recording.lock().await;
     let config = &service.settings.config;
     let (table, refusals) = files(config).await;
-    let Some(key) = read(config, File::Key)
-        .await
-        .and_then(|text| Key::read(&text).ok())
-    else {
+    let Some(server) = media_server(&service.settings).await else {
         return answer(StatusCode::OK, &Said::Standing(&Standing::Refused), &token);
-    };
-    let server = Jellyfin {
-        base: service.settings.jellyfin.clone(),
-        key,
-        client: service.client.clone(),
     };
 
     let (standing, after) = decline(&token, at, &table, refusals, &server).await;
@@ -233,17 +220,11 @@ pub(crate) async fn passed(service: &Service, at: u64) -> bool {
     if !due {
         return true;
     }
-    let Some(key) = read(config, File::Key)
-        .await
-        .and_then(|text| Key::read(&text).ok())
-    else {
-        eprintln!("decline: no invitation was taken back, because no key is written for it");
+    let Some(server) = media_server(&service.settings).await else {
+        eprintln!(
+            "decline: no invitation was taken back, because no key or no certificate pin is held for the media server"
+        );
         return true;
-    };
-    let server = Jellyfin {
-        base: service.settings.jellyfin.clone(),
-        key,
-        client: service.client.clone(),
     };
     let after = crate::lapsing::swept(
         at,
@@ -258,6 +239,23 @@ pub(crate) async fn passed(service: &Service, at: u64) -> bool {
     taking == Taking::SwitchingOff
         || after == lapses
         || recorded(config, File::Lapses, &after.written()).await
+}
+
+/// The media server as `settings` name it, reached with the key and over TLS pinned to the
+/// certificates held, or nothing where either is not held: the key is never sent where
+/// the certificate cannot be pinned.
+async fn media_server(settings: &Settings) -> Option<Jellyfin> {
+    let key = read(&settings.config, File::Key)
+        .await
+        .and_then(|text| Key::read(&text).ok())?;
+    let pins = read(&settings.config, File::Pins)
+        .await
+        .and_then(|text| lemonfiber_sidecar::Pins::read(&text).ok())?;
+    Some(Jellyfin {
+        base: settings.jellyfin.clone(),
+        key,
+        client: lemonfiber_pinned::client(pins.listed(), Some(ANSWER_WITHIN))?,
+    })
 }
 
 /// The core's table as `config` holds it now, where it can be read.

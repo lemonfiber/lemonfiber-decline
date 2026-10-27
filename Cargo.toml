@@ -20,16 +20,18 @@ jiff = { version = "0.2", default-features = false, features = ["std"] }
 # The contract it speaks, the kit that serves it, and the formats of the files in its
 # configuration directory, from the core at the commit the train releases this build with
 # (ADR-0033).
-lemonfiber-adapter-kit = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
-lemonfiber-contract = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
-lemonfiber-ports = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
-lemonfiber-sidecar = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+lemonfiber-adapter-kit = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1" }
+lemonfiber-contract = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1" }
+lemonfiber-ports = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1" }
+lemonfiber-pinned = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1" }
+lemonfiber-sidecar = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "signal", "sync", "time"] }
 
 [dev-dependencies]
+lemonfiber-pinned = { git = "https://github.com/lemonfiber/lemonfiber", rev = "f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1", features = ["test-support"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }
 
 [lints.rust]

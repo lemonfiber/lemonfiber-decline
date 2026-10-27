@@ -95,8 +95,22 @@ async fn asked(service: Arc<Service>, method: &str, path: &str) -> (StatusCode, 
     (status, String::from_utf8_lossy(&body).into_owned(), policy)
 }
 
+/// `app` served over TLS as the media server, its certificate pinned in `config`.
+fn served(config: &Config, app: Router) -> String {
+    let Some(served) = lemonfiber_pinned::fake::tls(app) else {
+        return String::new();
+    };
+    let _ = std::fs::write(
+        config
+            .0
+            .join(lemonfiber_sidecar::decline::File::Pins.name()),
+        format!("{}\n", served.pin),
+    );
+    served.base
+}
+
 /// A media server that holds the account `known`, unclaimed, and takes its policy.
-async fn jellyfin() -> String {
+fn jellyfin(config: &Config) -> String {
     let app = Router::new()
         .route(
             "/Users/{id}",
@@ -112,15 +126,7 @@ async fn jellyfin() -> String {
             "/Users/{id}/Policy",
             post(|| async { StatusCode::NO_CONTENT }),
         );
-    let Ok(listener) = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).await else {
-        return String::new();
-    };
-    let at = listener
-        .local_addr()
-        .map(|at| at.to_string())
-        .unwrap_or_default();
-    tokio::spawn(async move { axum::serve(listener, app).await });
-    format!("http://{at}")
+    served(config, app)
 }
 
 #[tokio::test]
@@ -172,7 +178,7 @@ async fn with_no_table_written_nothing_is_open() {
 async fn a_refusal_disables_the_account_and_is_recorded_for_the_core() {
     let config = Config::new("refusal").with_invitation();
     config.write(File::Key, "the-key\n");
-    let server = jellyfin().await;
+    let server = jellyfin(&config);
 
     let (status, body, _) = asked(
         service(&config, &server, Limit::standard()),
@@ -208,6 +214,66 @@ async fn without_its_key_the_service_declines_nothing() {
 
     assert!(body.contains("This invitation cannot be declined here."));
     assert!(config.read(File::Refusals).is_empty());
+}
+
+#[tokio::test]
+async fn without_a_pinned_certificate_the_key_is_never_sent() {
+    let config = Config::new("unpinned").with_invitation();
+    config.write(File::Key, "the-key\n");
+    let (server, writes) = jellyfin_remembering_writes(&config);
+
+    for pins in [None, Some("not a pin\n")] {
+        match pins {
+            None => {
+                let _ = std::fs::remove_file(
+                    config
+                        .0
+                        .join(lemonfiber_sidecar::decline::File::Pins.name()),
+                );
+            }
+            Some(text) => {
+                let _ = std::fs::write(
+                    config
+                        .0
+                        .join(lemonfiber_sidecar::decline::File::Pins.name()),
+                    text,
+                );
+            }
+        }
+        let (_, body, _) = asked(
+            service(&config, &server, Limit::standard()),
+            "POST",
+            "/decline/token",
+        )
+        .await;
+        assert!(body.contains("This invitation cannot be declined here."));
+    }
+    assert!(config.read(File::Refusals).is_empty());
+    assert!(writes.lock().is_ok_and(|one| one.is_empty()));
+}
+
+#[tokio::test]
+async fn a_media_server_presenting_another_certificate_is_never_sent_the_key() {
+    let config = Config::new("mispinned").with_invitation();
+    config.write(File::Key, "the-key\n");
+    let (server, writes) = jellyfin_remembering_writes(&config);
+    let _ = std::fs::write(
+        config
+            .0
+            .join(lemonfiber_sidecar::decline::File::Pins.name()),
+        format!("{}\n", lemonfiber_pinned::sha256(b"another certificate")),
+    );
+
+    let (_, body, _) = asked(
+        service(&config, &server, Limit::standard()),
+        "POST",
+        "/decline/token",
+    )
+    .await;
+
+    assert!(body.contains("The media server did not answer, so nothing was declined."));
+    assert!(config.read(File::Refusals).is_empty());
+    assert!(writes.lock().is_ok_and(|one| one.is_empty()));
 }
 
 #[tokio::test]
@@ -355,7 +421,7 @@ async fn a_refusal_that_cannot_be_recorded_still_says_what_was_done() {
 
     let config = Config::new("unrecorded").with_invitation();
     config.write(File::Key, "the-key\n");
-    let server = jellyfin().await;
+    let server = jellyfin(&config);
     let _ = std::fs::set_permissions(&config.0, std::fs::Permissions::from_mode(0o555));
 
     let (_, body, _) = asked(
@@ -372,7 +438,7 @@ async fn a_refusal_that_cannot_be_recorded_still_says_what_was_done() {
 
 /// A media server that holds the account `known`, never signed in to, with no password,
 /// and removes it when asked.
-async fn jellyfin_holding_an_offer() -> String {
+fn jellyfin_holding_an_offer(config: &Config) -> String {
     let app = Router::new()
         .route(
             "/Users/{id}",
@@ -386,15 +452,7 @@ async fn jellyfin_holding_an_offer() -> String {
             "/System/ActivityLog/Entries",
             get(|| async { Json(json!({"Items": []})) }),
         );
-    let Ok(listener) = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).await else {
-        return String::new();
-    };
-    let at = listener
-        .local_addr()
-        .map(|at| at.to_string())
-        .unwrap_or_default();
-    tokio::spawn(async move { axum::serve(listener, app).await });
-    format!("http://{at}")
+    served(config, app)
 }
 
 /// A configuration directory holding a key and one invitation whose window closed a
@@ -419,7 +477,7 @@ fn lapsed(name: &str) -> Config {
 #[tokio::test]
 async fn a_pass_takes_back_a_lapsed_invitation_and_records_it_for_the_core() {
     let config = lapsed("lapse-pass");
-    let server = jellyfin_holding_an_offer().await;
+    let server = jellyfin_holding_an_offer(&config);
 
     let written = passed(&service(&config, &server, Limit::standard()), now()).await;
 
@@ -450,7 +508,7 @@ async fn a_pass_with_nothing_due_reaches_nothing_and_writes_nothing() {
 
 /// A media server holding the account `known` as [`jellyfin_holding_an_offer`] does, which
 /// remembers each write it is asked for.
-async fn jellyfin_remembering_writes() -> (String, Arc<std::sync::Mutex<Vec<String>>>) {
+fn jellyfin_remembering_writes(config: &Config) -> (String, Arc<std::sync::Mutex<Vec<String>>>) {
     let writes = Arc::new(std::sync::Mutex::new(Vec::new()));
     let (removed, disabled) = (Arc::clone(&writes), Arc::clone(&writes));
     let app = Router::new()
@@ -480,22 +538,14 @@ async fn jellyfin_remembering_writes() -> (String, Arc<std::sync::Mutex<Vec<Stri
             "/System/ActivityLog/Entries",
             get(|| async { Json(json!({"Items": []})) }),
         );
-    let Ok(listener) = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).await else {
-        return (String::new(), writes);
-    };
-    let at = listener
-        .local_addr()
-        .map(|at| at.to_string())
-        .unwrap_or_default();
-    tokio::spawn(async move { axum::serve(listener, app).await });
-    (format!("http://{at}"), writes)
+    (served(config, app), writes)
 }
 
 #[tokio::test]
 async fn a_record_of_lapses_that_cannot_be_read_is_kept_and_the_lapsed_switched_off() {
     let config = lapsed("lapse-garbled");
     config.write(File::Lapses, "not a record");
-    let (server, writes) = jellyfin_remembering_writes().await;
+    let (server, writes) = jellyfin_remembering_writes(&config);
 
     let written = passed(&service(&config, &server, Limit::standard()), now()).await;
 
@@ -533,7 +583,7 @@ async fn a_pass_adds_to_the_lapses_already_recorded() {
         outcome: Outcome::Removed,
     });
     config.write(File::Lapses, &earlier.written());
-    let server = jellyfin_holding_an_offer().await;
+    let server = jellyfin_holding_an_offer(&config);
 
     let written = passed(&service(&config, &server, Limit::standard()), now()).await;
 
@@ -552,7 +602,7 @@ async fn a_pass_adds_to_the_lapses_already_recorded() {
 async fn without_its_key_a_pass_takes_nothing_back() {
     let config = lapsed("lapse-keyless");
     let _ = std::fs::remove_file(config.0.join(File::Key.name()));
-    let server = jellyfin_holding_an_offer().await;
+    let server = jellyfin_holding_an_offer(&config);
 
     let written = passed(&service(&config, &server, Limit::standard()), now()).await;
 
@@ -574,7 +624,7 @@ async fn within_seconds(done: impl Fn() -> bool) -> bool {
 #[tokio::test]
 async fn the_service_takes_back_a_lapsed_invitation_as_soon_as_it_starts() {
     let config = lapsed("lapse-running");
-    let server = jellyfin_holding_an_offer().await;
+    let server = jellyfin_holding_an_offer(&config);
 
     let running = tokio::spawn(lapsing(service(&config, &server, Limit::standard())));
     let recorded = within_seconds(|| !config.read(File::Lapses).is_empty()).await;
@@ -587,7 +637,7 @@ async fn the_service_takes_back_a_lapsed_invitation_as_soon_as_it_starts() {
 async fn a_lapse_that_cannot_be_recorded_leaves_the_service_running() {
     let config = lapsed("lapse-unrecorded");
     let _ = std::fs::create_dir(config.0.join(format!("{}.writing", File::Lapses.name())));
-    let server = jellyfin_holding_an_offer().await;
+    let server = jellyfin_holding_an_offer(&config);
 
     let running = tokio::spawn(lapsing(service(&config, &server, Limit::standard())));
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

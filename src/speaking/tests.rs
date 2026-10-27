@@ -5,7 +5,7 @@ use std::sync::Arc;
 use lemonfiber_adapter_kit::web::Web;
 use lemonfiber_contract::capabilities::invite::decline;
 use lemonfiber_contract::Contracted;
-use lemonfiber_ports::service::{Claimed, Declinable, Declining, Invitations};
+use lemonfiber_ports::service::{Claimed, Declinable, Declining, Invitations, KeyHeld};
 use lemonfiber_sidecar::decline::{File, Table, TokenHash};
 
 use super::{about, kit, serve, UPSTREAM};
@@ -80,10 +80,14 @@ async fn the_core_holds_it_to_a_key_and_applies_the_invitations_over_the_contrac
     assert!(core.is_some());
     let Some(core) = core else { return };
 
-    assert!(core.hold(&media_key()).await.is_ok());
+    let pins = vec!["ef".repeat(32)];
+    assert!(core.hold(&media_key(), &pins).await.is_ok());
     assert_eq!(
         core.held().await.ok().flatten(),
-        Some(TokenHash::of(&media_key()).as_str().to_owned())
+        Some(KeyHeld {
+            key: TokenHash::of(&media_key()).as_str().to_owned(),
+            pins,
+        })
     );
 
     let invitations = Invitations {
@@ -112,7 +116,10 @@ async fn a_caller_without_the_plugins_key_is_refused_and_changes_nothing() {
     assert!(stranger.is_some());
     let Some(stranger) = stranger else { return };
 
-    assert!(stranger.hold(&media_key()).await.is_err());
+    assert!(stranger
+        .hold(&media_key(), &["ef".repeat(32)])
+        .await
+        .is_err());
     assert!(stranger.held().await.is_err());
     assert_eq!(config.read(File::Key), "");
 }

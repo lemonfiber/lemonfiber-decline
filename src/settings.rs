@@ -16,8 +16,8 @@ pub(crate) struct Settings {
 const CONFIG: &str = "/config";
 
 /// The media server, unless `LEMONFIBER_DECLINE_JELLYFIN` names another: the stack's
-/// own service id and port for it.
-const JELLYFIN: &str = "http://jellyfin:8096";
+/// own service id and the internal TLS port it serves the core's certificate on.
+const JELLYFIN: &str = "https://jellyfin:8920";
 
 impl Settings {
     /// The settings `variable` gives, each falling back to the stack's default.

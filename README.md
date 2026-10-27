@@ -44,8 +44,8 @@ One network address may ask to decline five times a minute.
 | | |
 | --- | --- |
 | Listens on | Port 8080 inside its container for the decline page, which the stack publishes to the household, and port 8081 for lemonfiber's `invite.decline` contract, published on loopback alone |
-| Configuration | `/config`: the invitations and the Jellyfin key lemonfiber hands the service (`invitations.json`, `jellyfin.key`), the key lemonfiber asks the contract with (`lemonfiber.key`), and the `refusals.json` and `lapses.json` the service writes |
-| Settings | `LEMONFIBER_DECLINE_CONFIG` moves the configuration directory; `LEMONFIBER_DECLINE_JELLYFIN` points at Jellyfin (default `http://jellyfin:8096`) |
+| Configuration | `/config`: the invitations, the Jellyfin key and the SHA-256 of each certificate Jellyfin's internal TLS port may present, as lemonfiber hands them to the service (`invitations.json`, `jellyfin.key`, `media-server.pins`), the key lemonfiber asks the contract with (`lemonfiber.key`), and the `refusals.json` and `lapses.json` the service writes |
+| Settings | `LEMONFIBER_DECLINE_CONFIG` moves the configuration directory; `LEMONFIBER_DECLINE_JELLYFIN` points at Jellyfin's internal TLS port (default `https://jellyfin:8920`); the service sends its key only over TLS to a certificate whose SHA-256 is pinned, and reaches Jellyfin not at all while none is |
 | Health check | `decline health`, which asks the running service over loopback |
 | Container | Distroless base, non-root user, read-only root filesystem, no kernel capabilities |
 
