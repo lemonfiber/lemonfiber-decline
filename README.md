@@ -5,8 +5,8 @@ media stack. It lets somebody who was invited to the household's media server
 say no, and closes the account that was made for them.
 
 This repository builds the container image `ghcr.io/lemonfiber/decline`. You do
-not run it yourself: [`lemonfiber-media-stack`](https://github.com/lemonfiber/lemonfiber-media-stack)
-runs it as the service `decline`, and `lemonfiber` writes its configuration.
+not run it yourself: lemonfiber installs it as the plugin `decline`, from the
+`plugin.toml` here, and writes its configuration.
 
 ## Why it exists
 
@@ -17,8 +17,8 @@ decline address must work without the operator being around, and without giving
 the invitee, or anyone who finds the link, any other power over Jellyfin.
 
 So the decline address is served by this one small service, which holds a
-Jellyfin API key made for it alone and uses it for three calls only, all about
-the one account the invitation names.
+Jellyfin API key made for it alone and uses it for fixed calls only, each about
+one account an invitation names.
 
 ## What it does
 
@@ -41,23 +41,22 @@ One network address may ask to decline five times a minute.
 
 | | |
 | --- | --- |
-| Listens on | Port 8080 inside its container; the stack publishes it to the household |
-| Configuration | `/config`, where `lemonfiber` writes `invitations.json` and `jellyfin.key`, and the service writes `refusals.json` |
+| Listens on | Port 8080 inside its container for the decline page, which the stack publishes to the household, and port 8081 for lemonfiber's `invite.decline` contract, published on loopback alone |
+| Configuration | `/config`: the invitations and the Jellyfin key lemonfiber hands the service (`invitations.json`, `jellyfin.key`), the key lemonfiber asks the contract with (`lemonfiber.key`), and the `refusals.json` the service writes |
 | Settings | `LEMONFIBER_DECLINE_CONFIG` moves the configuration directory; `LEMONFIBER_DECLINE_JELLYFIN` points at Jellyfin (default `http://jellyfin:8096`) |
 | Health check | `decline health`, which asks the running service over loopback |
 | Container | Distroless base, non-root user, read-only root filesystem, no kernel capabilities |
 
-The compose entry and its networks are in
-[`lemonfiber-media-stack`](https://github.com/lemonfiber/lemonfiber-media-stack).
+lemonfiber writes the compose entry and its networks from `plugin.toml`.
 The design is written up in the specification:
 [`30-repos/lemonfiber-decline.md`](https://github.com/lemonfiber/spec/blob/main/30-repos/lemonfiber-decline.md).
 
 ## Building and testing
 
 You need Rust (the version in [`rust-toolchain.toml`](rust-toolchain.toml)) and
-Docker. The build fetches one crate from the
-[`lemonfiber`](https://github.com/lemonfiber/lemonfiber) repository, at the
-commit pinned in [`Cargo.toml`](Cargo.toml), so it needs network access the
+Docker. The build fetches the contract, the adapter kit, the ports and the file
+formats from the [`lemonfiber`](https://github.com/lemonfiber/lemonfiber)
+repository, at the commit pinned in [`Cargo.toml`](Cargo.toml), so it needs network access the
 first time.
 
 ```sh
@@ -66,7 +65,7 @@ docker build -t decline .
 ```
 
 Images are published from version tags. Each tag builds `linux/amd64` and
-`linux/arm64`, and `lemonfiber-media-stack` pins the digest it published.
+`linux/arm64`, and `plugin.toml` pins the digest it published.
 
 ## Contributing and security
 

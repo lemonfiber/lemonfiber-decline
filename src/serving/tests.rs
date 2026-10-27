@@ -7,7 +7,7 @@ use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{File, Invitation, Key, Refusals, Table, TokenHash};
+use lemonfiber_sidecar::decline::{Claimed, File, Invitation, Key, Refusals, Table, TokenHash};
 use serde_json::json;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
@@ -36,13 +36,16 @@ impl Config {
     }
 
     fn with_invitation(self) -> Self {
-        let table = Table::of(vec![Invitation {
-            token: TokenHash::of("token"),
-            account: "known".to_owned(),
-            name: "Ana".to_owned(),
-            issued: now() - 60,
-            lapses: now() + 3_600,
-        }]);
+        let table = Table::of(
+            Claimed::HasPassword,
+            vec![Invitation {
+                token: TokenHash::of("token"),
+                account: "known".to_owned(),
+                name: "Ana".to_owned(),
+                issued: now() - 60,
+                lapses: now() + 3_600,
+            }],
+        );
         self.write(File::Table, &table.written());
         self
     }
@@ -229,6 +232,21 @@ async fn anything_else_is_not_found() {
     let config = Config::new("other");
     let (status, _, _) = asked(service(&config, "", Limit::standard()), "GET", "/").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn the_household_port_answers_no_contract_route() {
+    let config = Config::new("no-contract");
+    for (method, path) in [
+        ("GET", "/lemonfiber/adapter/v1/about"),
+        ("POST", "/lemonfiber/invite.decline/v1/hold"),
+        ("POST", "/lemonfiber/invite.decline/v1/held"),
+        ("POST", "/lemonfiber/invite.decline/v1/apply_invitations"),
+    ] {
+        let (status, _, _) = asked(service(&config, "", Limit::standard()), method, path).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {path}");
+    }
+    assert_eq!(config.read(File::Key), "");
 }
 
 #[tokio::test]

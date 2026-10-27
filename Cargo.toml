@@ -14,11 +14,16 @@ name = "decline"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = "0.1"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
-# The formats the core writes into this service's configuration directory, from the
-# core at the commit the train releases this build with (ADR-0033).
-lemonfiber-sidecar = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3eea6a2f6bf6cbf905eddee5356b1bc649e1a116" }
+# The contract it speaks, the kit that serves it, and the formats of the files in its
+# configuration directory, from the core at the commit the train releases this build with
+# (ADR-0033).
+lemonfiber-adapter-kit = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
+lemonfiber-contract = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
+lemonfiber-ports = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
+lemonfiber-sidecar = { git = "https://github.com/lemonfiber/lemonfiber", rev = "3d26c96e2267f1e8e539b5d1cfa5e03d54fe4001" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

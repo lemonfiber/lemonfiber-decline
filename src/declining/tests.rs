@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use lemonfiber_sidecar::decline::{Invitation, Refusal, Refusals, Table, TokenHash};
+use lemonfiber_sidecar::decline::{Claimed, Invitation, Refusal, Refusals, Table, TokenHash};
 use serde_json::{json, Value};
 
 use super::{decline, standing, Standing};
@@ -54,13 +54,16 @@ impl Server for Fake {
 }
 
 fn table() -> Table {
-    Table::of(vec![Invitation {
-        token: TokenHash::of("token"),
-        account: "8c7a".to_owned(),
-        name: "Ana".to_owned(),
-        issued: 1_000,
-        lapses: 2_000,
-    }])
+    Table::of(
+        Claimed::HasPassword,
+        vec![Invitation {
+            token: TokenHash::of("token"),
+            account: "8c7a".to_owned(),
+            name: "Ana".to_owned(),
+            issued: 1_000,
+            lapses: 2_000,
+        }],
+    )
 }
 
 #[test]
