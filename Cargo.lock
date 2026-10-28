@@ -770,7 +770,7 @@ dependencies = [
 [[package]]
 name = "lemonfiber-pinned"
 version = "0.17.0"
-source = "git+https://github.com/lemonfiber/lemonfiber?rev=f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1#f1584160a7a4ed4606496efcd4d1a6e7bbcf3fb1"
+source = "git+https://github.com/lemonfiber/lemonfiber?rev=cea9a819ca86c41be4c86161eaf670c4e6379003#cea9a819ca86c41be4c86161eaf670c4e6379003"
 dependencies = [
  "axum",
  "futures-util",

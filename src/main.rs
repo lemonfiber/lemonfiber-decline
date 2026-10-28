@@ -34,7 +34,13 @@ const CONTRACT: SocketAddr =
 async fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         None => {
-            let settings = settings::Settings::from(|name| std::env::var(name).ok());
+            let settings = match settings::Settings::from(&|name| std::env::var(name).ok()) {
+                Ok(settings) => settings,
+                Err(why) => {
+                    eprintln!("decline: {why}");
+                    return ExitCode::from(2);
+                }
+            };
             let config = settings.config.clone();
             let service = serving::Service::new(settings, limit::Limit::standard());
             let stopped = async {

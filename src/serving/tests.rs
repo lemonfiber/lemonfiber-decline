@@ -63,7 +63,9 @@ fn service(config: &Config, jellyfin: &str, limit: Limit) -> Arc<Service> {
     Service::new(
         Settings {
             config: config.0.clone(),
-            jellyfin: jellyfin.to_owned(),
+            jellyfin: lemonfiber_pinned::Https::parse(jellyfin)
+                .or_else(|| lemonfiber_pinned::Https::parse(NOWHERE))
+                .unwrap_or_else(|| unreachable!("an HTTPS address")),
         },
         limit,
     )
@@ -95,6 +97,9 @@ async fn asked(service: Arc<Service>, method: &str, path: &str) -> (StatusCode, 
     (status, String::from_utf8_lossy(&body).into_owned(), policy)
 }
 
+/// An HTTPS address nothing answers at.
+const NOWHERE: &str = "https://127.0.0.1:9";
+
 /// `app` served over TLS as the media server, its certificate pinned in `config`.
 fn served(config: &Config, app: Router) -> String {
     let Some(served) = lemonfiber_pinned::fake::tls(app) else {
@@ -106,7 +111,7 @@ fn served(config: &Config, app: Router) -> String {
             .join(lemonfiber_sidecar::decline::File::Pins.name()),
         format!("{}\n", served.pin),
     );
-    served.base
+    served.base.to_string()
 }
 
 /// A media server that holds the account `known`, unclaimed, and takes its policy.
@@ -496,11 +501,7 @@ async fn a_pass_with_nothing_due_reaches_nothing_and_writes_nothing() {
     let config = Config::new("lapse-nothing").with_invitation();
     config.write(File::Key, "the-key\n");
 
-    let written = passed(
-        &service(&config, "http://127.0.0.1:9", Limit::standard()),
-        now(),
-    )
-    .await;
+    let written = passed(&service(&config, NOWHERE, Limit::standard()), now()).await;
 
     assert!(written);
     assert!(config.read(File::Lapses).is_empty());
@@ -561,11 +562,7 @@ async fn a_record_of_lapses_that_cannot_be_read_is_kept_and_the_lapsed_switched_
 async fn a_server_that_cannot_be_reached_is_left_for_the_next_pass() {
     let config = lapsed("lapse-unreached");
 
-    let written = passed(
-        &service(&config, "http://127.0.0.1:9", Limit::standard()),
-        now(),
-    )
-    .await;
+    let written = passed(&service(&config, NOWHERE, Limit::standard()), now()).await;
 
     assert!(written);
     assert!(config.read(File::Lapses).is_empty());

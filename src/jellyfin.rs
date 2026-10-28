@@ -5,6 +5,7 @@
 //! account. Each call is made server-side for one account the core's table names;
 //! nothing a browser sends is passed through.
 
+use lemonfiber_pinned::Https;
 use serde_json::Value;
 
 use lemonfiber_sidecar::decline::Key;
@@ -46,10 +47,10 @@ pub(crate) trait Server {
     async fn remove(&self, id: &str) -> Result<(), Silent>;
 }
 
-/// The media server over HTTP, with the key minted for this service.
+/// The media server over pinned TLS, with the key minted for this service.
 pub(crate) struct Jellyfin {
-    /// Where the server answers on the network the two share.
-    pub(crate) base: String,
+    /// Where the server answers on the network the two share: its internal TLS port.
+    pub(crate) base: Https,
     /// The key minted for this service alone.
     pub(crate) key: Key,
     /// The client every call is made with.
@@ -70,10 +71,19 @@ impl Jellyfin {
         )
     }
 
-    async fn get(&self, path: &str) -> Result<Option<Value>, Silent> {
+    /// The address of `path` under the server's, which keeps its scheme, host and port.
+    fn at(&self, path: &str) -> Result<reqwest::Url, Silent> {
+        self.base
+            .joined(path)
+            .map(|joined| joined.as_url().clone())
+            .ok_or(Silent)
+    }
+
+    async fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Option<Value>, Silent> {
         let answer = self
             .client
-            .get(format!("{}{path}", self.base))
+            .get(self.at(path)?)
+            .query(query)
             .header("Authorization", self.authorisation())
             .send()
             .await
@@ -90,22 +100,25 @@ impl Jellyfin {
 
 impl Server for Jellyfin {
     async fn account(&self, id: &str) -> Result<Option<Account>, Silent> {
-        let Some(user) = self.get(&format!("/Users/{id}")).await? else {
+        let Some(user) = self.get(&format!("/Users/{id}"), &[]).await? else {
             return Ok(None);
         };
         account(&user).map(Some).ok_or(Silent)
     }
 
     async fn claimed_since(&self, id: &str, since: u64) -> Result<bool, Silent> {
-        let path = format!("/System/ActivityLog/Entries?minDate={}", iso(since));
-        let entries = self.get(&path).await?.ok_or(Silent)?;
+        let from = iso(since);
+        let entries = self
+            .get("/System/ActivityLog/Entries", &[("minDate", from.as_str())])
+            .await?
+            .ok_or(Silent)?;
         claimed(&entries, id, since).ok_or(Silent)
     }
 
     async fn disable(&self, id: &str, policy: Value) -> Result<(), Silent> {
         let answer = self
             .client
-            .post(format!("{}/Users/{id}/Policy", self.base))
+            .post(self.at(&format!("/Users/{id}/Policy"))?)
             .header("Authorization", self.authorisation())
             .json(&disabled(policy))
             .send()
@@ -117,7 +130,7 @@ impl Server for Jellyfin {
     async fn remove(&self, id: &str) -> Result<(), Silent> {
         let answer = self
             .client
-            .delete(format!("{}/Users/{id}", self.base))
+            .delete(self.at(&format!("/Users/{id}"))?)
             .header("Authorization", self.authorisation())
             .send()
             .await
