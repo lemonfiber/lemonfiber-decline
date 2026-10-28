@@ -1,6 +1,6 @@
 //! What the core hands the service over `invite.decline`, held in its configuration
-//! directory: the media server key it switches an invitation off with, and the table of
-//! invitations it may act on.
+//! directory: the media server key it switches an invitation off with, the certificates
+//! the media server may present to it, and the table of invitations it may act on.
 //!
 //! Each is written whole, by renaming a written copy over it, so a refusal or a pass over
 //! lapsed invitations never reads half of one, and readable by the service's own user
@@ -9,8 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use lemonfiber_ports::service::{Claimed, Declining, Failure, Invitations};
+use lemonfiber_ports::service::{Claimed, Declining, Failure, Invitations, KeyHeld};
 use lemonfiber_sidecar::decline::{Claimed as Telling, File, Invitation, Key, Table, TokenHash};
+use lemonfiber_sidecar::Pins;
 
 /// The name the service gives itself in a failure.
 const SERVICE: &str = "decline";
@@ -21,8 +22,8 @@ const HASH_DIGITS: usize = 64;
 /// Who may read what it holds: the service's own user alone.
 const OWNER_ONLY: u32 = 0o600;
 
-/// The key and the table, held in the configuration directory `config`, written one at a
-/// time.
+/// The key, the pins and the table, held in the configuration directory `config`, written
+/// one at a time.
 pub(crate) struct Holding {
     config: PathBuf,
     writing: tokio::sync::Mutex<()>,
@@ -37,12 +38,12 @@ impl Holding {
         }
     }
 
-    /// Write `text` to `file`, whole, from a copy made afresh, so a copy left behind lends
-    /// it neither its permissions nor a link.
-    async fn written(&self, file: File, text: &str) -> Result<(), Failure> {
+    /// Write `text` to the file `name`, whole, from a copy made afresh, so a copy left
+    /// behind lends it neither its permissions nor a link.
+    async fn written(&self, name: &str, text: &str) -> Result<(), Failure> {
         let _writing = self.writing.lock().await;
-        let record = self.config.join(file.name());
-        let writing = self.config.join(format!("{}.writing", file.name()));
+        let record = self.config.join(name);
+        let writing = self.config.join(format!("{name}.writing"));
         let text = text.to_owned();
         let done = tokio::task::spawn_blocking(move || {
             use std::io::Write as _;
@@ -63,30 +64,42 @@ impl Holding {
         .await;
         done.ok()
             .and_then(Result::ok)
-            .ok_or_else(|| refused(&format!("{} could not be written", file.name())))
+            .ok_or_else(|| refused(&format!("{name} could not be written")))
     }
 }
 
 #[async_trait]
 impl Declining for Holding {
-    async fn hold(&self, key: &str) -> Result<(), Failure> {
+    async fn hold(&self, key: &str, pins: &[String]) -> Result<(), Failure> {
         let key = Key::read(key).map_err(|unreadable| refused(&unreadable.to_string()))?;
-        self.written(File::Key, &key.written()).await
+        let pins = Pins::of(pins).map_err(|unreadable| refused(&unreadable.to_string()))?;
+        self.written(File::Pins.name(), &pins.written()).await?;
+        self.written(File::Key.name(), &key.written()).await
     }
 
-    async fn held(&self) -> Result<Option<String>, Failure> {
-        Ok(
-            tokio::fs::read_to_string(self.config.join(File::Key.name()))
-                .await
-                .ok()
-                .and_then(|text| Key::read(&text).ok())
-                .map(|key| key.fingerprint()),
-        )
+    async fn held(&self) -> Result<Option<KeyHeld>, Failure> {
+        let Some(key) = tokio::fs::read_to_string(self.config.join(File::Key.name()))
+            .await
+            .ok()
+            .and_then(|text| Key::read(&text).ok())
+        else {
+            return Ok(None);
+        };
+        let pins = tokio::fs::read_to_string(self.config.join(File::Pins.name()))
+            .await
+            .ok()
+            .and_then(|text| Pins::read(&text).ok())
+            .map(Vec::from)
+            .unwrap_or_default();
+        Ok(Some(KeyHeld {
+            key: key.fingerprint(),
+            pins,
+        }))
     }
 
     async fn apply_invitations(&self, invitations: &Invitations) -> Result<(), Failure> {
         let table = table(invitations)?;
-        self.written(File::Table, &table.written()).await
+        self.written(File::Table.name(), &table.written()).await
     }
 }
 

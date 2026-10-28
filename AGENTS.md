@@ -14,7 +14,7 @@ The decline service: the one image that answers an invitation's decline address 
 
 ## The one rule you cannot break here
 
-**It acts only on what the core's invitation table names.** It takes the table and its Jellyfin key over `invite.decline`, on a port of its own that the household never reaches, under the plugin's key. It makes three fixed Jellyfin calls, for the one account a valid token names, changes only `IsDisabled` from false to true, and forwards nothing. A route that passes a request through to Jellyfin, or acts on an account the table does not name, is a defect however it is reached.
+**It acts only on what the core's invitation table names.** It takes the table, its Jellyfin key and the pins of the certificates Jellyfin's internal TLS port may present over `invite.decline`, on a port of its own that the household never reaches, under the plugin's key. It reaches Jellyfin only over TLS, at that port, and sends the key only to a certificate whose SHA-256 is pinned. It makes fixed Jellyfin calls (ADR-0029 §2b) and forwards nothing. Its whole effect on an account the table names is one of two: `IsDisabled` from false to true, on a refusal or when an invitation's window closes, or the account removed, when its window closes and every guard in ADR-0029 §2a holds on reads made just before the call. Nothing is removed on doubt, and nothing is left open on it: where whether an account was claimed cannot be read, or the record of lapses cannot be read, it is switched off and kept. A route that passes a request through to Jellyfin, an account the table does not name being touched, or a removal without every guard holding, is a defect however it is reached.
 
 ## Code standards (enforced)
 
