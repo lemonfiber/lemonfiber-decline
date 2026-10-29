@@ -7,6 +7,7 @@ yanked = "deny"
 # remove itself: the older copy belongs to a dependency, and the reason names which.
 multiple-versions = "deny"
 skip = [
+  { crate = "syn@2", reason = "jni's macros, under reqwest's platform verifier on Android, are on the 2.x line" },
   { crate = "windows-sys@0.52", reason = "ring and errno, under tokio, are on the 0.52 line" },
 ]
 # Two families are refused as dependencies rather than merely avoided as a habit,
