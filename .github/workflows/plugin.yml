@@ -8,4 +8,4 @@ concurrency:
   cancel-in-progress: true
 jobs:
   plugin:
-    uses: lemonfiber/spec/.github/workflows/first-party-plugin.yml@5fa73fdc020fa14fea2b58535b9881fed75a70ed # v1.0.122
+    uses: lemonfiber/spec/.github/workflows/first-party-plugin.yml@2fc314fa018cfddfbd689bb78bf23e699806e180 # v1.0.124
