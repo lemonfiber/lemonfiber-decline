@@ -81,7 +81,7 @@ jobs:
     permissions:
       contents: read
       security-events: read
-    uses: lemonfiber/spec/.github/workflows/codeql-alerts.yml@cb2c0640a7d2a8e7bd309680c682f792f1fdcf62 # v1.0.126
+    uses: lemonfiber/spec/.github/workflows/codeql-alerts.yml@cd72a083d5f0adc22347c4839d50cc99b9cb822f # v1.0.129
     with:
       # A matrix's aggregate: not `success` if either language's analysis failed,
       # which is the right reading — an alert list missing one language's findings
