@@ -48,11 +48,14 @@ impl Service {
     }
 }
 
+/// Where an invitation is declined, with `{token}` where its token goes.
+pub(crate) const PAGE: &str = "/decline/{token}";
+
 /// The routes the service answers: its health, the page, and the refusal.
 pub(crate) fn routes(service: Arc<Service>) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/decline/{token}", get(shown).post(declined))
+        .route(PAGE, get(shown).post(declined))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(service)
 }
@@ -163,13 +166,11 @@ async fn read(config: &Path, file: File) -> Option<String> {
         .ok()
 }
 
-/// Write `text` to the record `file`, whole, by renaming a written copy over it, so the
-/// core never reads half of one.
+/// Write `text` to the record `file`, whole and readable by the service's own user alone.
 async fn recorded(config: &Path, file: File, text: &str) -> bool {
-    let record = config.join(file.name());
-    let written = config.join(format!("{}.writing", file.name()));
-    tokio::fs::write(&written, text).await.is_ok()
-        && tokio::fs::rename(&written, &record).await.is_ok()
+    crate::holding::replaced(config, file.name(), text)
+        .await
+        .is_ok()
 }
 
 /// How often the service looks for invitations whose window has closed.
