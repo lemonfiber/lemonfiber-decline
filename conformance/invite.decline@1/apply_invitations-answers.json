@@ -1,0 +1,10 @@
+{
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:34531af17d89afc37841731b30872fab35b7e5ef5979b938e5b8726fb2a1f309",
+  "note": "The case's invitations, written whole and owner-only as the table the service acts on.",
+  "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/apply_invitations", "accept": "application/json"},
+  "response": {
+    "status": 200,
+    "headers": {"content-type": "application/json"},
+    "body_starts_with": "null"
+  }
+}
