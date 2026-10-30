@@ -33,6 +33,13 @@ impl Config {
         let _ = std::fs::write(self.0.join(file.name()), text);
     }
 
+    fn mode(&self, file: File) -> u32 {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::metadata(self.0.join(file.name()))
+            .map(|meta| meta.permissions().mode() & 0o777)
+            .unwrap_or_default()
+    }
+
     fn read(&self, file: File) -> String {
         std::fs::read_to_string(self.0.join(file.name())).unwrap_or_default()
     }
@@ -196,6 +203,7 @@ async fn a_refusal_disables_the_account_and_is_recorded_for_the_core() {
     assert!(body.contains("You declined the invitation."));
     let recorded = Refusals::read(&config.read(File::Refusals));
     assert!(recorded.is_ok_and(|refusals| refusals.of(&TokenHash::of("token")).is_some()));
+    assert_eq!(config.mode(File::Refusals), 0o600);
 
     let (_, again, _) = asked(
         service(&config, &server, Limit::standard()),
@@ -488,6 +496,7 @@ async fn a_pass_takes_back_a_lapsed_invitation_and_records_it_for_the_core() {
 
     let lapses = Lapses::read(&config.read(File::Lapses));
     assert!(written);
+    assert_eq!(config.mode(File::Lapses), 0o600);
     assert_eq!(
         lapses
             .ok()

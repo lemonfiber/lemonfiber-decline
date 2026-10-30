@@ -4,13 +4,19 @@
 //!
 //! Each is written whole, by renaming a written copy over it, so a refusal or a pass over
 //! lapsed invitations never reads half of one, and readable by the service's own user
-//! alone.
+//! alone. What it declined and what it took back as each window closed are read back
+//! from the records it keeps beside them.
 
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use lemonfiber_ports::service::{Claimed, Declining, Failure, Invitations, KeyHeld};
-use lemonfiber_sidecar::decline::{Claimed as Telling, File, Invitation, Key, Table, TokenHash};
+use lemonfiber_ports::service::{
+    Claimed, Declined, Declining, Failure, Invitations, KeyHeld, Lapsed, LeftBecause, TakenBack,
+};
+use lemonfiber_sidecar::decline::{
+    Claimed as Telling, File, Invitation, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals,
+    Table, TokenHash,
+};
 use lemonfiber_sidecar::Pins;
 
 /// The name the service gives itself in a failure.
@@ -38,33 +44,21 @@ impl Holding {
         }
     }
 
-    /// Write `text` to the file `name`, whole, from a copy made afresh, so a copy left
-    /// behind lends it neither its permissions nor a link.
+    /// Write `text` to the file `name`, whole, one write at a time.
     async fn written(&self, name: &str, text: &str) -> Result<(), Failure> {
         let _writing = self.writing.lock().await;
-        let record = self.config.join(name);
-        let writing = self.config.join(format!("{name}.writing"));
-        let text = text.to_owned();
-        let done = tokio::task::spawn_blocking(move || {
-            use std::io::Write as _;
-            use std::os::unix::fs::OpenOptionsExt as _;
-            match std::fs::remove_file(&writing) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
-                _ => {}
-            }
-            let mut out = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(OWNER_ONLY)
-                .open(&writing)?;
-            out.write_all(text.as_bytes())?;
-            out.sync_all()?;
-            std::fs::rename(&writing, &record)
-        })
-        .await;
-        done.ok()
-            .and_then(Result::ok)
-            .ok_or_else(|| refused(&format!("{name} could not be written")))
+        replaced(&self.config, name, text)
+            .await
+            .map_err(|_| refused(&format!("{name} could not be written")))
+    }
+
+    /// What `file` holds, none where it is not there, or why it cannot be read.
+    async fn kept(&self, file: File) -> Result<Option<String>, Failure> {
+        match tokio::fs::read_to_string(self.config.join(file.name())).await {
+            Ok(text) => Ok(Some(text)),
+            Err(missing) if missing.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(unreadable(file)),
+        }
     }
 }
 
@@ -101,6 +95,105 @@ impl Declining for Holding {
         let table = table(invitations)?;
         self.written(File::Table.name(), &table.written()).await
     }
+
+    async fn refusals(&self) -> Result<Vec<Declined>, Failure> {
+        let refusals = self
+            .kept(File::Refusals)
+            .await?
+            .map(|text| Refusals::read(&text))
+            .transpose()
+            .map_err(|_| unreadable(File::Refusals))?
+            .unwrap_or_default();
+        Ok(refusals.refusals.iter().map(declined).collect())
+    }
+
+    async fn lapses(&self) -> Result<Vec<Lapsed>, Failure> {
+        let lapses = self
+            .kept(File::Lapses)
+            .await?
+            .map(|text| Lapses::read(&text))
+            .transpose()
+            .map_err(|_| unreadable(File::Lapses))?
+            .unwrap_or_default();
+        Ok(lapses.lapses.iter().map(lapsed).collect())
+    }
+
+    async fn page(&self) -> Result<String, Failure> {
+        Ok(crate::serving::PAGE.to_owned())
+    }
+}
+
+/// Write `text` to the file `name` in `config`, whole, from a copy made afresh and
+/// readable by the service's own user alone, so a copy left behind lends it neither its
+/// permissions nor a link, and a reader never sees half of one.
+///
+/// # Errors
+///
+/// Why the copy could not be cleared, written or renamed over the file.
+pub(crate) async fn replaced(config: &Path, name: &str, text: &str) -> std::io::Result<()> {
+    let record = config.join(name);
+    let writing = config.join(format!("{name}.writing"));
+    let text = text.to_owned();
+    tokio::task::spawn_blocking(move || {
+        use std::io::Write as _;
+        use std::os::unix::fs::OpenOptionsExt as _;
+        match std::fs::remove_file(&writing) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
+        let mut out = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(OWNER_ONLY)
+            .open(&writing)?;
+        out.write_all(text.as_bytes())?;
+        out.sync_all()?;
+        std::fs::rename(&writing, &record)
+    })
+    .await
+    .map_err(std::io::Error::other)?
+}
+
+/// `refusal` as the contract carries it.
+fn declined(refusal: &Refusal) -> Declined {
+    Declined {
+        token: refusal.token.as_str().to_owned(),
+        account: refusal.account.clone(),
+        at: refusal.at,
+    }
+}
+
+/// `lapse` as the contract carries it.
+fn lapsed(lapse: &Lapse) -> Lapsed {
+    Lapsed {
+        token: lapse.token.as_str().to_owned(),
+        account: lapse.account.clone(),
+        name: lapse.name.clone(),
+        issued: lapse.issued,
+        at: lapse.at,
+        outcome: match lapse.outcome {
+            Outcome::Removed => TakenBack::Removed,
+            Outcome::SwitchedOff => TakenBack::SwitchedOff,
+            Outcome::Left(why) => TakenBack::from(left(why)),
+        },
+    }
+}
+
+/// Why an account was left as it was, as the contract says it.
+const fn left(why: Left) -> LeftBecause {
+    match why {
+        Left::Claimed => LeftBecause::Claimed,
+        Left::Administrator => LeftBecause::Administrator,
+        Left::Disabled => LeftBecause::Disabled,
+        Left::Gone => LeftBecause::Gone,
+        Left::Reoffered => LeftBecause::Reoffered,
+        Left::Unmatched => LeftBecause::Unmatched,
+    }
+}
+
+/// A record in `file` that could not be read.
+fn unreadable(file: File) -> Failure {
+    refused(&format!("{} could not be read", file.name()))
 }
 
 /// `invitations` as the table the service acts on, or why one of them is refused.

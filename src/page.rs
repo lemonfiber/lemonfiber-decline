@@ -18,12 +18,12 @@ pub(crate) fn page(said: &Said<'_>, token: &str) -> String {
     let body = match said {
         Said::Standing(Standing::Open(name)) => format!(
             "<p>You were invited to watch on this household's media server as {}.</p>\n\
-             <form method=\"post\" action=\"/decline/{}\">\
+             <form method=\"post\" action=\"{}\">\
              <button type=\"submit\">Decline the invitation</button></form>\n\
              <p class=\"small\">Declining closes this invitation and the account made for it. \
              Whoever invited you will see that you declined.</p>",
             escaped(name),
-            escaped(token)
+            crate::serving::PAGE.replace("{token}", &escaped(token))
         ),
         Said::Standing(Standing::Declined) => paragraph(
             "You declined the invitation. The account made for you can no longer be signed in to.",

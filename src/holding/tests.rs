@@ -1,8 +1,14 @@
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 
-use lemonfiber_ports::service::{Claimed, Declinable, Declining, Failure, Invitations, KeyHeld};
-use lemonfiber_sidecar::decline::{Claimed as Telling, File, Key, Table, TokenHash};
+use lemonfiber_ports::service::{
+    Claimed, Declinable, Declined, Declining, Failure, Invitations, KeyHeld, Lapsed, LeftBecause,
+    TakenBack,
+};
+use lemonfiber_sidecar::decline::{
+    Claimed as Telling, File, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals, Table,
+    TokenHash,
+};
 
 use super::Holding;
 
@@ -293,4 +299,144 @@ async fn what_cannot_be_written_is_refused() {
             .await,
         Err(Failure::Refused { .. })
     ));
+}
+
+fn lapse(token: &str, outcome: Outcome) -> Lapse {
+    Lapse {
+        token: TokenHash::of(token),
+        account: format!("account-{token}"),
+        name: format!("name-{token}"),
+        issued: 10,
+        at: 20,
+        outcome,
+    }
+}
+
+#[tokio::test]
+async fn every_refusal_recorded_is_answered_by_its_token_s_sha256_alone() {
+    let config = Config::new("refusals");
+    let refusals = Refusals::default()
+        .with(Refusal {
+            token: TokenHash::of("first"),
+            account: "one".to_owned(),
+            at: 5,
+        })
+        .with(Refusal {
+            token: TokenHash::of("second"),
+            account: "two".to_owned(),
+            at: 6,
+        });
+    let _ = std::fs::write(config.0.join(File::Refusals.name()), refusals.written());
+
+    let answer = config.holding().refusals().await;
+
+    assert_eq!(
+        answer.ok(),
+        Some(vec![
+            Declined {
+                token: TokenHash::of("first").as_str().to_owned(),
+                account: "one".to_owned(),
+                at: 5,
+            },
+            Declined {
+                token: TokenHash::of("second").as_str().to_owned(),
+                account: "two".to_owned(),
+                at: 6,
+            },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn every_lapse_recorded_is_answered_with_what_became_of_its_account() {
+    let config = Config::new("lapses");
+    let outcomes = [
+        (Outcome::Removed, TakenBack::Removed),
+        (Outcome::SwitchedOff, TakenBack::SwitchedOff),
+        (Outcome::Left(Left::Claimed), LeftBecause::Claimed.into()),
+        (
+            Outcome::Left(Left::Administrator),
+            LeftBecause::Administrator.into(),
+        ),
+        (Outcome::Left(Left::Disabled), LeftBecause::Disabled.into()),
+        (Outcome::Left(Left::Gone), LeftBecause::Gone.into()),
+        (
+            Outcome::Left(Left::Reoffered),
+            LeftBecause::Reoffered.into(),
+        ),
+        (
+            Outcome::Left(Left::Unmatched),
+            LeftBecause::Unmatched.into(),
+        ),
+    ];
+    let lapses = outcomes
+        .iter()
+        .enumerate()
+        .fold(Lapses::default(), |lapses, (at, (outcome, _))| {
+            lapses.with(lapse(&at.to_string(), *outcome))
+        });
+    let _ = std::fs::write(config.0.join(File::Lapses.name()), lapses.written());
+
+    let answer = config.holding().lapses().await.unwrap_or_default();
+
+    assert_eq!(
+        answer,
+        outcomes
+            .iter()
+            .enumerate()
+            .map(|(at, (_, outcome))| Lapsed {
+                token: TokenHash::of(&at.to_string()).as_str().to_owned(),
+                account: format!("account-{at}"),
+                name: format!("name-{at}"),
+                issued: 10,
+                at: 20,
+                outcome: *outcome,
+            })
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn nothing_recorded_yet_is_answered_as_nothing() {
+    let config = Config::new("unrecorded");
+    let holding = config.holding();
+
+    assert_eq!(holding.refusals().await.ok(), Some(Vec::new()));
+    assert_eq!(holding.lapses().await.ok(), Some(Vec::new()));
+}
+
+#[tokio::test]
+async fn a_record_that_cannot_be_read_is_refused_by_name() {
+    let config = Config::new("unreadable-records");
+    let holding = config.holding();
+    let _ = std::fs::write(config.0.join(File::Refusals.name()), "not a record");
+    let _ = std::fs::create_dir(config.0.join(File::Lapses.name()));
+
+    let refusals = holding.refusals().await;
+    let lapses = holding.lapses().await;
+
+    assert!(
+        matches!(&refusals, Err(Failure::Refused { detail, .. }) if detail.contains(File::Refusals.name())),
+        "{refusals:?}"
+    );
+    assert!(
+        matches!(&lapses, Err(Failure::Refused { detail, .. }) if detail.contains(File::Lapses.name())),
+        "{lapses:?}"
+    );
+    let _ = std::fs::remove_dir(config.0.join(File::Lapses.name()));
+    let _ = std::fs::write(config.0.join(File::Lapses.name()), "not a record");
+    assert!(matches!(
+        holding.lapses().await,
+        Err(Failure::Refused { .. })
+    ));
+}
+
+#[tokio::test]
+async fn the_page_is_answered_at_the_path_the_service_serves_it_under() {
+    let config = Config::new("page");
+
+    assert_eq!(
+        config.holding().page().await.ok().as_deref(),
+        Some("/decline/{token}")
+    );
 }
