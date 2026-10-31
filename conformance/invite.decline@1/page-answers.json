@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:ee908ae2c4cb7d41682f4d8410c65dc6a09038a75a1153a037d6292c89f6a6e8",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:75592c99ba506958e61ebc1b63f42cabc9baee6fa6783ad4c6315da51ecd1eb3",
   "note": "The path the service serves the decline page under, with {token} where the token goes.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/page", "accept": "application/json"},
   "response": {
