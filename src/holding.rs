@@ -9,15 +9,15 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::formats::decline::{
+    Claimed as Telling, File, Invitation, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals,
+    Table, TokenHash,
+};
+use crate::formats::Pins;
 use async_trait::async_trait;
 use lemonfiber_ports::service::{
     Claimed, Declined, Declining, Failure, Invitations, KeyHeld, Lapsed, LeftBecause, TakenBack,
 };
-use lemonfiber_sidecar::decline::{
-    Claimed as Telling, File, Invitation, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals,
-    Table, TokenHash,
-};
-use lemonfiber_sidecar::Pins;
 
 /// The name the service gives itself in a failure.
 const SERVICE: &str = "decline";

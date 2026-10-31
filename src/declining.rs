@@ -5,7 +5,7 @@
 //! claimed, writes its policy back disabled, and records the refusal, in that order:
 //! the account cannot be signed in to from the moment the server accepts the policy.
 
-use lemonfiber_sidecar::decline::{Invitation, Refusal, Refusals, Table, TokenHash};
+use crate::formats::decline::{Invitation, Refusal, Refusals, Table, TokenHash};
 
 use crate::jellyfin::Server;
 

@@ -1,13 +1,13 @@
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 
+use crate::formats::decline::{
+    Claimed as Telling, File, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals, Table,
+    TokenHash,
+};
 use lemonfiber_ports::service::{
     Claimed, Declinable, Declined, Declining, Failure, Invitations, KeyHeld, Lapsed, LeftBecause,
     TakenBack,
-};
-use lemonfiber_sidecar::decline::{
-    Claimed as Telling, File, Key, Lapse, Lapses, Left, Outcome, Refusal, Refusals, Table,
-    TokenHash,
 };
 
 use super::Holding;
@@ -52,12 +52,8 @@ fn pins() -> Vec<String> {
 }
 
 fn pins_file(config: &Config) -> String {
-    std::fs::read_to_string(
-        config
-            .0
-            .join(lemonfiber_sidecar::decline::File::Pins.name()),
-    )
-    .unwrap_or_default()
+    std::fs::read_to_string(config.0.join(crate::formats::decline::File::Pins.name()))
+        .unwrap_or_default()
 }
 
 fn invitation(token: &str) -> Declinable {
@@ -110,13 +106,9 @@ async fn the_key_and_the_table_are_readable_by_the_service_alone() {
 
     assert_eq!(config.mode(File::Key), 0o600);
     assert_eq!(config.mode(File::Table), 0o600);
-    let pinned = std::fs::metadata(
-        config
-            .0
-            .join(lemonfiber_sidecar::decline::File::Pins.name()),
-    )
-    .map(|meta| meta.permissions().mode() & 0o777)
-    .unwrap_or_default();
+    let pinned = std::fs::metadata(config.0.join(crate::formats::decline::File::Pins.name()))
+        .map(|meta| meta.permissions().mode() & 0o777)
+        .unwrap_or_default();
     assert_eq!(pinned, 0o600);
 }
 

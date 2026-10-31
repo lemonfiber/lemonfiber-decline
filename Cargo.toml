@@ -15,16 +15,16 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1"
+base64 = "0.23"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
-# The contract it speaks, the kit that serves it, and the formats of the files in its
-# configuration directory, from the core at the commit the train releases this build with
-# (ADR-0033).
+# The contract it speaks and the kit that serves it, from the core at the commit the
+# train releases this build with (ADR-0033).
 lemonfiber-adapter-kit = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
 lemonfiber-contract = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
 lemonfiber-ports = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
 lemonfiber-pinned = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
-lemonfiber-sidecar = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
+ring = "0.17"
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

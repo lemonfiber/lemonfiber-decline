@@ -8,6 +8,7 @@
 //! port of its own.
 
 mod declining;
+mod formats;
 mod holding;
 mod jellyfin;
 mod lapsing;

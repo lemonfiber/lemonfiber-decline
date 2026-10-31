@@ -769,13 +769,14 @@ version = "0.17.0"
 dependencies = [
  "async-trait",
  "axum",
+ "base64",
  "jiff",
  "lemonfiber-adapter-kit",
  "lemonfiber-contract",
  "lemonfiber-pinned",
  "lemonfiber-ports",
- "lemonfiber-sidecar",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "tokio",
@@ -837,17 +838,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "lemonfiber-sidecar"
-version = "0.17.0"
-source = "git+https://github.com/lemonfiber/lemonfiber?rev=73539d17ce7497324a03032861dcd4dfdd451f6f#73539d17ce7497324a03032861dcd4dfdd451f6f"
-dependencies = [
- "base64",
- "ring",
- "serde",
- "serde_json",
 ]
 
 [[package]]

@@ -2,11 +2,11 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::formats::decline::{File, Table, TokenHash};
 use lemonfiber_adapter_kit::web::Web;
 use lemonfiber_contract::capabilities::invite::decline;
 use lemonfiber_contract::Contracted;
 use lemonfiber_ports::service::{Claimed, Declinable, Declining, Invitations, KeyHeld};
-use lemonfiber_sidecar::decline::{File, Table, TokenHash};
 
 use super::{about, kit, serve, UPSTREAM};
 
