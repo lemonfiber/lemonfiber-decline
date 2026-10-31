@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use lemonfiber_sidecar::decline::{
+use crate::formats::decline::{
     Claimed, Invitation, Lapse, Lapses, Left, Outcome, Refusal, Refusals, Table, TokenHash,
 };
 use serde_json::{json, Value};

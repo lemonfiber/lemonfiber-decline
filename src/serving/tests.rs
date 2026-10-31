@@ -2,14 +2,14 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::formats::decline::{
+    Claimed, File, Invitation, Key, Lapses, Outcome, Refusals, Table, TokenHash,
+};
 use axum::body::{to_bytes, Body};
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{
-    Claimed, File, Invitation, Key, Lapses, Outcome, Refusals, Table, TokenHash,
-};
 use serde_json::json;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
@@ -113,9 +113,7 @@ fn served(config: &Config, app: Router) -> String {
         return String::new();
     };
     let _ = std::fs::write(
-        config
-            .0
-            .join(lemonfiber_sidecar::decline::File::Pins.name()),
+        config.0.join(crate::formats::decline::File::Pins.name()),
         format!("{}\n", served.pin),
     );
     served.base.to_string()
@@ -238,17 +236,12 @@ async fn without_a_pinned_certificate_the_key_is_never_sent() {
     for pins in [None, Some("not a pin\n")] {
         match pins {
             None => {
-                let _ = std::fs::remove_file(
-                    config
-                        .0
-                        .join(lemonfiber_sidecar::decline::File::Pins.name()),
-                );
+                let _ =
+                    std::fs::remove_file(config.0.join(crate::formats::decline::File::Pins.name()));
             }
             Some(text) => {
                 let _ = std::fs::write(
-                    config
-                        .0
-                        .join(lemonfiber_sidecar::decline::File::Pins.name()),
+                    config.0.join(crate::formats::decline::File::Pins.name()),
                     text,
                 );
             }
@@ -271,9 +264,7 @@ async fn a_media_server_presenting_another_certificate_is_never_sent_the_key() {
     config.write(File::Key, "the-key\n");
     let (server, writes) = jellyfin_remembering_writes(&config);
     let _ = std::fs::write(
-        config
-            .0
-            .join(lemonfiber_sidecar::decline::File::Pins.name()),
+        config.0.join(crate::formats::decline::File::Pins.name()),
         format!("{}\n", lemonfiber_pinned::sha256(b"another certificate")),
     );
 
@@ -580,7 +571,7 @@ async fn a_server_that_cannot_be_reached_is_left_for_the_next_pass() {
 #[tokio::test]
 async fn a_pass_adds_to_the_lapses_already_recorded() {
     let config = lapsed("lapse-added");
-    let earlier = Lapses::default().with(lemonfiber_sidecar::decline::Lapse {
+    let earlier = Lapses::default().with(crate::formats::decline::Lapse {
         token: TokenHash::of("earlier"),
         account: "gone".to_owned(),
         name: "Bo".to_owned(),

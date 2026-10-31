@@ -8,7 +8,7 @@
 use lemonfiber_pinned::Https;
 use serde_json::Value;
 
-use lemonfiber_sidecar::decline::Key;
+use crate::formats::decline::Key;
 
 /// An account as the service needs it.
 #[derive(Debug, Clone, PartialEq)]

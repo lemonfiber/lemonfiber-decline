@@ -15,9 +15,7 @@
 
 use std::future::Future;
 
-use lemonfiber_sidecar::decline::{
-    Claimed, Invitation, Lapse, Lapses, Left, Outcome, Refusals, Table,
-};
+use crate::formats::decline::{Claimed, Invitation, Lapse, Lapses, Left, Outcome, Refusals, Table};
 
 use crate::jellyfin::{normalised, Account, Server};
 

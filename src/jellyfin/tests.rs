@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
 
+use crate::formats::decline::Key;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use lemonfiber_pinned::Https;
-use lemonfiber_sidecar::decline::Key;
 use serde_json::{json, Value};
 
 use super::{account, claimed, disabled, iso, seconds, Jellyfin, Server, Silent};

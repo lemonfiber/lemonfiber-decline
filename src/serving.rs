@@ -6,12 +6,12 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::formats::decline::{Claimed, File, Key, Lapses, Refusals, Table};
 use axum::extract::{ConnectInfo, Path as Route, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use lemonfiber_sidecar::decline::{Claimed, File, Key, Lapses, Refusals, Table};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
@@ -251,7 +251,7 @@ async fn media_server(settings: &Settings) -> Option<Jellyfin> {
         .and_then(|text| Key::read(&text).ok())?;
     let pins = read(&settings.config, File::Pins)
         .await
-        .and_then(|text| lemonfiber_sidecar::Pins::read(&text).ok())?;
+        .and_then(|text| crate::formats::Pins::read(&text).ok())?;
     Some(Jellyfin {
         base: settings.jellyfin.clone(),
         key,
