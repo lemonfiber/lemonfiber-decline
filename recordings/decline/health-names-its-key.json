@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:d7d075280e083ce2e08f799e4e3bf0784ef92412ee9664c87120fcb1baba99ac",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:50cc97fc4f240a9e51b006397f344029f8639962d8b241dfc41e0da401a63ccd",
   "note": "The health check, asked for presenting nothing, on a fresh instance before lemonfiber has written its key. It answers which key it holds, by fingerprint, and names none while it holds none; the key itself is never used to answer.",
   "request": {"method": "GET", "path": "/health"},
   "response": {
