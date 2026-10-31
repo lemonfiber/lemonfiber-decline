@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:50cc97fc4f240a9e51b006397f344029f8639962d8b241dfc41e0da401a63ccd",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:649f1f4f8460f4d8dd706c0f2f3d2bc0493d3c28749f5ca21362b014d08b5915",
   "note": "Every invitation the service declined: none, since nobody declined while it was recorded.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/refusals", "accept": "application/json"},
   "response": {
