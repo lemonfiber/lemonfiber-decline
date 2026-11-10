@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:f241b8b263cabd643dd8ea9646a677a4824e75e6409e763cbf39fd44f416206b",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:92de44a45ae7a75e4373e7d0b19e8461fe3bffbe8b4459ada84a6b43d4b04de3",
   "note": "The case's media server key and certificate pins, written whole and owner-only into the service's configuration directory.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/hold", "accept": "application/json"},
   "response": {
