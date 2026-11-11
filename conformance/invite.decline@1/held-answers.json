@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:12e4972b6ca2ac8523387f3106b5d3e8ec7aaa681a55b57992b11d68dd6ee798",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:5fb2db6eb45d56e737a81003948402ebe68b28776aa71b57b6577ee249dc1477",
   "note": "The key the service holds, answered by its SHA-256 alone, and the certificates it accepts.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/held", "accept": "application/json"},
   "response": {
