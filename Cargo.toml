@@ -17,7 +17,7 @@ path = "src/main.rs"
 async-trait = "0.1"
 base64 = "0.23"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
-jiff = { version = "0.2", default-features = false, features = ["std"] }
+jiff = { version = "1.0", default-features = false, features = ["std"] }
 # The contract it speaks and the kit that serves it, from the core at the commit the
 # train releases this build with (ADR-0033).
 lemonfiber-adapter-kit = { git = "https://github.com/lemonfiber/lemonfiber", rev = "73539d17ce7497324a03032861dcd4dfdd451f6f" }
