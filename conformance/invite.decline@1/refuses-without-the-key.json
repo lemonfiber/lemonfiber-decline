@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:8f8895c42dfac5fcf3f4b8be70c1735926289fc917460aea4ae1dbf60142865e",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:39d8719aba9399f5752cc4fa63b5996c974150ce215fa6937a73355847b5406b",
   "note": "Asked without the plugin's key: the kit refuses it before the service's holding is reached.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/hold", "accept": "application/json"},
   "response": {"status": 401}
