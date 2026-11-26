@@ -2,18 +2,18 @@
 //!
 //! Five files, in the service's configuration directory:
 //!
-//! - [`File::Table`], the invitations it may act on, written by the core at each
-//!   invitation and mounted read-only. A token is held only as its hash.
-//! - [`File::Key`], the one Jellyfin API key minted for it, written by the core
-//!   owner-only and mounted read-only.
+//! - [`File::Table`], the invitations it may act on, as the core applies them over
+//!   `invite.decline`. A token is held only as its hash.
+//! - [`File::Key`], the one Jellyfin API key minted for it, as the core hands it over
+//!   `invite.decline`.
 //! - [`File::Pins`], the SHA-256 of each certificate the media server's internal TLS
-//!   port may present, the only ones the service accepts there, written by the core
-//!   beside the key.
-//! - [`File::Refusals`], what it declined, written by the service and read back by
-//!   the core, which reports each as the invitation's standing.
-//! - [`File::Lapses`], what it took back when an invitation's window closed,
-//!   written by the service and read back by the core, which reports each as
-//!   `expired`.
+//!   port may present, the only ones the service accepts there, handed beside the key.
+//! - [`File::Refusals`], what it declined, which the core reads over `invite.decline`
+//!   and reports each as the invitation's standing.
+//! - [`File::Lapses`], what it took back when an invitation's window closed, which the
+//!   core reads over `invite.decline` and reports each as `expired`.
+//!
+//! Every file is written by the service alone, owner-only.
 
 use serde::{Deserialize, Serialize};
 

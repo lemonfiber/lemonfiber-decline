@@ -1,21 +1,22 @@
 # What this repository implements, one row per requirement (OPS-R74).
 #
-# `done` means the requirement is met in full by what is here, `partial` that this
-# repository holds its part and the rest lives elsewhere, `open` that nothing here
-# meets it yet. The release gate and the no-stubs gate read this file; a pull
-# request that changes whether a requirement is met changes its row.
+# Each row records this repository's own share of the requirement: `done` where that
+# share is built and tested here, `partial` where part of it is, `open` where none of
+# it is yet. Where a requirement also binds the core or another part, their trackers
+# record those shares. The release gate and the no-stubs gate read this file, and a
+# `partial` or `open` row here holds the requirement open; a pull request that changes
+# whether this share is met changes its row.
 #
-# The core writes the service's compose entry from this repository's `plugin.toml`.
-# Writing the invitation, its addresses and the table this service reads, and reporting
-# a refusal as `declined` and a removal at the window's close as `expired`, are the
-# core's. The core reaches the service through the files in its configuration
-# directory until it asks over `invite.decline` and the bundle installs it.
+# The core writes the service's compose entry from this repository's `plugin.toml`,
+# and hands it its key, its pins and the invitations over `invite.decline`. Writing the
+# invitation and its addresses, and reporting a refusal as `declined` and a removal at
+# the window's close as `expired`, are the core's.
 
 requirement = [
   { id = "D6-R15", state = "partial", evidence = ["src/serving.rs", "src/page.rs", "src/page/tests.rs::an_open_invitation_names_the_account_and_offers_the_refusal"] },
   { id = "D6-R16", state = "partial", evidence = ["src/declining.rs", "src/declining/tests.rs::declining_disables_the_account_and_records_the_refusal", "src/declining/tests.rs::a_second_refusal_writes_nothing"] },
-  { id = "D6-R21", state = "partial", evidence = ["src/lapsing.rs", "src/lapsing/tests.rs::an_account_nobody_was_seen_in_is_removed_when_its_window_closes", "src/lapsing/tests.rs::an_account_somebody_has_been_in_is_switched_off_and_kept", "src/serving.rs"] },
-  { id = "F14-R1", state = "open" },
-  { id = "F14-R7", state = "open" },
+  { id = "D6-R21", state = "done", evidence = ["src/lapsing.rs", "src/serving.rs", "src/holding.rs", "src/lapsing/tests.rs::an_account_nobody_was_seen_in_is_removed_when_its_window_closes", "src/lapsing/tests.rs::an_account_somebody_has_been_in_is_switched_off_and_kept", "src/lapsing/tests.rs::an_administrator_is_never_removed_or_switched_off", "src/lapsing/tests.rs::an_account_with_a_password_is_left_as_claimed", "src/lapsing/tests.rs::an_account_offered_again_since_the_table_was_read_is_left_as_it_is", "src/lapsing/tests.rs::a_table_that_cannot_be_read_again_acts_on_nothing_and_is_tried_again", "src/lapsing/tests.rs::an_account_whose_claim_cannot_be_read_is_switched_off_and_kept", "src/lapsing/tests.rs::a_declined_invitation_or_one_already_taken_back_is_not_taken_back", "src/serving/tests.rs::a_pass_takes_back_a_lapsed_invitation_and_records_it_for_the_core", "src/serving/tests.rs::the_service_takes_back_a_lapsed_invitation_as_soon_as_it_starts", "src/holding/tests.rs::every_lapse_recorded_is_answered_with_what_became_of_its_account"] },
+  { id = "F14-R1", state = "done", evidence = ["src/speaking.rs", "src/holding.rs", "plugin.toml", "src/speaking/tests.rs::it_says_it_speaks_invite_decline_for_itself", "src/speaking/tests.rs::the_core_holds_it_to_a_key_and_applies_the_invitations_over_the_contract", "src/speaking/tests.rs::a_caller_without_the_plugins_key_is_refused_and_changes_nothing", "src/speaking/tests.rs::with_its_key_written_it_answers_the_core_on_the_contract_port"] },
+  { id = "F14-R7", state = "done", evidence = ["plugin.toml", "proofs.json", "conformance/invite.decline@1/hold-answers.json", "conformance/invite.decline@1/held-answers.json", "conformance/invite.decline@1/apply_invitations-answers.json", "conformance/invite.decline@1/refusals-answers.json", "conformance/invite.decline@1/lapses-answers.json", "conformance/invite.decline@1/page-answers.json", "conformance/invite.decline@1/refuses-without-the-key.json", ".github/workflows/plugin.yml"] },
   { id = "G5-R14", state = "partial", evidence = ["src/serving.rs"] },
 ]
