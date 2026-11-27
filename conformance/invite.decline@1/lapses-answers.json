@@ -1,5 +1,5 @@
 {
-  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:da42db5a49f249e6bf96d5556fd7e02150f3957ffd62f65a695ccc15bbf56e8f",
+  "recorded_from": "ghcr.io/lemonfiber/decline@sha256:ee4eddfb96473baf760753dfe97b9bacf00776af43141b0df4c5bebbc4bc04ea",
   "note": "Every invitation the service took back or left as its window closed: none, since no window closed while it was recorded.",
   "request": {"method": "POST", "path": "/lemonfiber/invite.decline/v1/lapses", "accept": "application/json"},
   "response": {
